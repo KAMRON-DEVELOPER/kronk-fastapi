@@ -6,7 +6,7 @@ services:
     ports:
       - "5432:5432"
     secrets:
-      - POSTGRES_USER
+      - POSTGRES_DB
       - POSTGRES_USER
       - POSTGRES_PASSWORD
       - ca.pem
