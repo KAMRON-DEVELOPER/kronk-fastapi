@@ -22,23 +22,23 @@ services:
         uid: "70"
         gid: "70"
     environment:
-      - POSTGRES_DB=/run/secrets/POSTGRES_DB
-      - POSTGRES_USER=/run/secrets/POSTGRES_USER
-      - POSTGRES_PASSWORD=/run/secrets/POSTGRES_PASSWORD
+      - POSTGRES_DB_FILE=/run/secrets/POSTGRES_DB
+      - POSTGRES_USER_FILE=/run/secrets/POSTGRES_USER
+      - POSTGRES_PASSWORD_FILE=/run/secrets/POSTGRES_PASSWORD
     volumes:
       - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
       - ./configurations/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./configurations/postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       # - ./volumes/postgres_storage:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          'pg_isready -U "$$(cat /run/secrets/POSTGRES_USER)" -d "$$(cat /run/secrets/POSTGRES_DB)"',
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 3
+    # healthcheck:
+    #   test:
+    #     [
+    #       "CMD-SHELL",
+    #       'pg_isready -U "$$(cat /run/secrets/POSTGRES_USER)" -d "$$(cat /run/secrets/POSTGRES_DB)"',
+    #     ]
+    #   interval: 5s
+    #   timeout: 5s
+    #   retries: 3
     deploy:
       mode: replicated
       replicas: 1
