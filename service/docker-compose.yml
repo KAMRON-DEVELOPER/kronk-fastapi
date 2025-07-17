@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:alpine
+    container_name: postgres_container
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    secrets:
+      - POSTGRES_USER
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - ca.pem
+      - pg_server_cert.pem
+      - pg_server_key.pem
+    environment:
+      - POSTGRES_DB=POSTGRES_DB
+      - POSTGRES_USER=POSTGRES_USER
+      - POSTGRES_PASSWORD=POSTGRES_PASSWORD
+    volumes:
+      - ./configurations/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./configurations/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./volumes/postgres_storage:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: redis_container
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "/redis.conf",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    ports:
+      - "6379:6379"
+    secrets:
+      - REDIS_USER
+      - REDIS_PASSWORD
+      - ca.pem
+      - redis_server_cert.pem
+      - redis_server_key.pem
+    environment:
+      - REDIS_USER=REDIS_USER
+      - REDIS_PASSWORD=REDIS_PASSWORD
+    volumes:
+      - ./configurations/redis.conf:/redis.conf:ro
+      - ./volumes/redis_storage:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_storage:
+    name: postgres_storage_volume
+  redis_storage:
+    name: redis_storage_volume
+
+secrets:
+  POSTGRES_DB:
+    external: true
+  POSTGRES_USER:
+    external: true
+  POSTGRES_PASSWORD:
+    external: true
+  REDIS_USER:
+    external: true
+  REDIS_PASSWORD:
+    external: true
+  ca_cert:
+    external: true
+  pg_server_cert.pem:
+    external: true
+  pg_server_key.pem:
+    external: true
+  redis_server_cert.pem:
+    external: true
+  redis_server_key.pem:
+    external: true
+
