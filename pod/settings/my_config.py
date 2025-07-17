@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = ""
 
     # FIREBASE ADMIN SDK
-    firebase_adminsdk: str = ""
+    FIREBASE_ADMINSDK: str = ""
 
     # S3
     S3_ACCESS_KEY_ID: str = ""
@@ -61,7 +61,7 @@ def get_settings():
     my_logger.warning(f"REDIS_PASSWORD: {s.REDIS_PASSWORD[:3]}{'*' * (len(s.REDIS_PASSWORD) - 3) if s.REDIS_PASSWORD else ''}\n")
 
     # FIREBASE
-    my_logger.warning(f"firebase_adminsdk: {s.firebase_adminsdk}\n")
+    my_logger.warning(f"firebase_adminsdk: {s.FIREBASE_ADMINSDK}\n")
 
     # S3
     my_logger.warning(f"S3_ACCESS_KEY_ID: {s.S3_ACCESS_KEY_ID}")
