@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis/redis-stack-server:latest
+    command:
+      [
+        "redis-server",
+        "/redis.conf",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    ports:
+      - "6379:6379"
+    secrets:
+      - REDIS_PASSWORD
+      - ca.pem
+      - redis_server_cert.pem
+      - redis_server_key.pem
+    environment:
+      - REDIS_PASSWORD=/run/secrets/REDIS_PASSWORD
+    volumes:
+      - ./configurations/redis.conf:/redis.conf:ro
+      - ./volumes/redis_storage:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_storage:
+    name: redis_storage_volume
+
+secrets:
+  REDIS_PASSWORD:
+    external: true
+  ca.pem:
+    external: true
+  redis_server_cert.pem:
+    external: true
+  redis_server_key.pem:
+    external: true
