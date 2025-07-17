@@ -78,7 +78,7 @@ secrets:
     external: true
   REDIS_PASSWORD:
     external: true
-  ca_cert:
+  ca.pem:
     external: true
   pg_server_cert.pem:
     external: true
