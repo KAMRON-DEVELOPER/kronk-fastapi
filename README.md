@@ -152,12 +152,10 @@ echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
 echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?ssl=verify-full&slrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | sudo tee /run/secrets/DATABASE_URL
 
 # REDIS for fastapi & uvicorn
-echo "default" | sudo tee /run/secrets/REDIS_USER
 echo "kamronbek2003" | sudo tee /run/secrets/REDIS_PASSWORD
 echo "localhost" | sudo tee /run/secrets/REDIS_HOST
 
 # REDIS for local compose
-echo "default" | docker secret create REDIS_USER -
 echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "localhost" | docker secret create REDIS_HOST -
 
@@ -193,12 +191,11 @@ docker secret create fastapi_client_cert.pem certs/fastapi/fastapi-client-cert.p
 docker secret create fastapi_client_key.pem certs/fastapi/fastapi-client-key.pem
 
 # POSTGRES
-echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?ssl=verify-full&sslrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | docker secret create DATABASE_URL -
+echo "postgresql+asyncpg://kamronbek:kamronbek2003@postgres.kronk.uz:5432/kronk_db?ssl=verify-full&sslrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | docker secret create DATABASE_URL -
 
 # REDIS
-echo "default" | docker secret create REDIS_USER -
 echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
-echo "localhost" | docker secret create REDIS_HOST -
+echo "redis.kronk.uz" | docker secret create REDIS_HOST -
 
 # Firebase
 docker secret create FIREBASE_ADMINSDK firebase-adminsdk.json
@@ -232,7 +229,6 @@ echo "kamronbek" | docker secret create POSTGRES_USER -
 echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
 
 # REDIS
-echo "default" | docker secret create REDIS_USER -
 echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "localhost" | docker secret create REDIS_HOST -
 ```

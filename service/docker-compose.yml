@@ -44,13 +44,11 @@ services:
     ports:
       - "6379:6379"
     secrets:
-      - REDIS_USER
       - REDIS_PASSWORD
       - ca.pem
       - redis_server_cert.pem
       - redis_server_key.pem
     environment:
-      - REDIS_USER=REDIS_USER
       - REDIS_PASSWORD=REDIS_PASSWORD
     volumes:
       - ./configurations/redis.conf:/redis.conf:ro
@@ -77,8 +75,6 @@ secrets:
   POSTGRES_USER:
     external: true
   POSTGRES_PASSWORD:
-    external: true
-  REDIS_USER:
     external: true
   REDIS_PASSWORD:
     external: true
