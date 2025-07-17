@@ -1,6 +1,11 @@
 services:
   postgres:
     image: postgres:alpine
+    # entrypoint: /postgres-entrypoint.sh
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
     ports:
       - "5432:5432"
     secrets:
@@ -9,24 +14,41 @@ services:
       - POSTGRES_PASSWORD
       - ca.pem
       - pg_server_cert.pem
-      - pg_server_key.pem
+      - fastapi_client_cert.pem
+      - fastapi_client_key.pem
+      - source: pg_server_key.pem
+        target: /var/lib/postgresql/certs/pg_server_key.pem
+        mode: 0600
+        uid: "70"
+        gid: "70"
     environment:
       - POSTGRES_DB=/run/secrets/POSTGRES_DB
       - POSTGRES_USER=/run/secrets/POSTGRES_USER
       - POSTGRES_PASSWORD=/run/secrets/POSTGRES_PASSWORD
     volumes:
-      - ./configurations/postgresql.conf:/etc/postgresql/postgresql.conf:ro
-      - ./configurations/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
-      - ./volumes/postgres_storage:/var/lib/postgresql/data
+      - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
+      - ./configurations/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./configurations/postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # - ./volumes/postgres_storage:/var/lib/postgresql/data
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+          'pg_isready -U "$$(cat /run/secrets/POSTGRES_USER)" -d "$$(cat /run/secrets/POSTGRES_DB)"',
         ]
       interval: 5s
       timeout: 5s
       retries: 3
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          [
+            node.role == manager,
+          ]
+      restart_policy:
+        condition: on-failure
 
 volumes:
   postgres_storage:
@@ -44,4 +66,8 @@ secrets:
   pg_server_cert.pem:
     external: true
   pg_server_key.pem:
+    external: true
+  fastapi_client_cert.pem:
+    external: true
+  fastapi_client_key.pem:
     external: true
