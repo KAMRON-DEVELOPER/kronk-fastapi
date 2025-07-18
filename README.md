@@ -307,5 +307,11 @@ psql -h 127.0.0.1 -U kamronbek -d kronk_db
 psql "sslmode=verify-full sslrootcert=/home/kamronbek/certs/ca/ca.pem sslcert=/home/kamronbek/certs/fastapi/fastapi-client-cert.pem sslkey=/home/kamronbek/certs/fastapi/fastapi-client-key.pem host=localhost hostaddr=127.0.0.1 port=5432 user=kamronbek dbname=kronk_db"
 ```
 
+### Connecting to redis
+
+```bash
+redis-cli --tls --cacert ~/certs/ca/ca.pem --cert ~/certs/fastapi/fastapi-client-cert.pem --key ~/certs/fastapi/fastapi-client-key.pem -a kamronbek2003
+```
+
 ---
 ---

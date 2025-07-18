@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_KEY: str = ""
     S3_ENDPOINT: str = ""
+    S3_REGION: str = ""
     S3_BUCKET_NAME: str = ""
 
     # FASTAPI JWT
@@ -61,12 +62,13 @@ def get_settings():
     my_logger.warning(f"REDIS_PASSWORD: {s.REDIS_PASSWORD[:3]}{'*' * (len(s.REDIS_PASSWORD) - 3) if s.REDIS_PASSWORD else ''}\n")
 
     # FIREBASE
-    my_logger.warning(f"firebase_adminsdk: {s.FIREBASE_ADMINSDK}\n")
+    my_logger.warning(f"firebase_adminsdk: {s.FIREBASE_ADMINSDK}, type: {type(s.FIREBASE_ADMINSDK)}\n")
 
     # S3
     my_logger.warning(f"S3_ACCESS_KEY_ID: {s.S3_ACCESS_KEY_ID}")
     my_logger.warning(f"S3_SECRET_KEY: {s.S3_SECRET_KEY[:4]}{'*' * (len(s.S3_SECRET_KEY) - 4) if s.S3_SECRET_KEY else ''}")
     my_logger.warning(f"S3_ENDPOINT: {s.S3_ENDPOINT}")
+    my_logger.warning(f"S3_ENDPOINT: {s.S3_REGION}")
     my_logger.warning(f"S3_BUCKET_NAME: {s.S3_BUCKET_NAME}\n")
 
     # JWT

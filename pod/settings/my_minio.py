@@ -18,7 +18,8 @@ minio_client: Minio = Minio(
     access_key=settings.S3_ACCESS_KEY_ID,
     secret_key=settings.S3_SECRET_KEY,
     endpoint=settings.S3_ENDPOINT,
-    secure=False,
+    region=settings.S3_REGION,
+    secure=True,
 )
 
 
@@ -47,7 +48,8 @@ async def put_object_to_minio(object_name: str, data: bytes, content_type: str, 
         if for_update and old_object_name:
             await minio_client.remove_object(bucket_name=settings.S3_BUCKET_NAME, object_name=old_object_name)
 
-        result: ObjectWriteResult = await minio_client.put_object(bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, data=BytesIO(data), length=len(data),
+        _data = BytesIO(data)  # noqa
+        result: ObjectWriteResult = await minio_client.put_object(bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, data=_data, length=len(data),
                                                                   content_type=content_type)
 
         return result.object_name
