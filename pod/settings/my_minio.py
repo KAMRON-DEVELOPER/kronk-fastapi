@@ -11,7 +11,6 @@ from miniopy_async.helpers import ObjectWriteResult
 
 from settings.my_config import get_settings
 from utility.my_logger import my_logger
-
 settings = get_settings()
 
 minio_client: Minio = Minio(
