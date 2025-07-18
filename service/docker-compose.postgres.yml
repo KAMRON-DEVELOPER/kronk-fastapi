@@ -6,13 +6,15 @@ services:
       - postgres
       - -c
       - config_file=/etc/postgresql/postgresql.conf
-    # ports:
-    #   - "5432:5432"
     ports:
-      - target: 5432
-        published: 5432
-        protocol: tcp
-        mode: host
+      - "5432:5432"
+    networks:
+      - postgres_network
+    # ports:
+    #   - target: 5432
+    #     published: 5432
+    #     protocol: tcp
+    #     mode: host
     secrets:
       - POSTGRES_DB
       - POSTGRES_USER
@@ -80,3 +82,8 @@ secrets:
     external: true
   fastapi_client_key.pem:
     external: true
+
+networks:
+  postgres_network:
+    attachable: true
+    name: postgres_default

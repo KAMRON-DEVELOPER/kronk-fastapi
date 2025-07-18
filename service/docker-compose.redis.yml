@@ -6,13 +6,10 @@ services:
       - -c
       - |
         redis-server /redis.conf --requirepass "$$(cat /run/secrets/REDIS_PASSWORD)"
-    # ports:
-    #   - "6379:6379"
     ports:
-      - target: 6379
-        published: 6379
-        protocol: tcp
-        mode: host
+      - "6379:6379"
+    networks:
+      - redis_network
     secrets:
       - REDIS_PASSWORD
       - ca.pem
@@ -62,3 +59,8 @@ secrets:
     external: true
   fastapi_client_key.pem:
     external: true
+
+networks:
+  redis_network:
+    attachable: true
+    name: redis_default
