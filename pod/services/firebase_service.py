@@ -1,4 +1,5 @@
 import asyncio
+import json
 from functools import partial
 
 from firebase_admin import auth, credentials, initialize_app
@@ -13,7 +14,7 @@ settings = get_settings()
 
 def initialize_firebase():
     try:
-        cred = credentials.Certificate(cert=settings.FIREBASE_ADMINSDK)
+        cred = credentials.Certificate(cert=json.loads(s=settings.FIREBASE_ADMINSDK))
         default_app = initialize_app(credential=cred)
         my_logger.debug(f"firebase default_app.project_id: {default_app.project_id}, default_app.name: {default_app.name}")
     except Exception as e:
