@@ -1,7 +1,8 @@
-import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
+from pydantic import model_validator, FilePath
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from utility.my_logger import my_logger
@@ -18,11 +19,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
 
     # REDIS & TASKIQ
+    CA: str = ""
+    CA_PATH: Optional[FilePath] = None
+    FASTAPI_CLIENT_CERT: str = ""
+    FASTAPI_CLIENT_CERT_PATH: Optional[FilePath] = None
+    FASTAPI_CLIENT_KEY: str = ""
+    FASTAPI_CLIENT_KEY_PATH: Optional[FilePath] = None
     REDIS_HOST: str = ""
     REDIS_PASSWORD: str = ""
 
     # FIREBASE ADMIN SDK
     FIREBASE_ADMINSDK: str = ""
+    FIREBASE_ADMINSDK_PATH: Optional[FilePath] = None
 
     # S3
     S3_ACCESS_KEY_ID: str = ""
@@ -39,6 +47,24 @@ class Settings(BaseSettings):
 
     # EMAIL
     EMAIL_SERVICE_API_KEY: str = ""
+
+    @model_validator(mode="after")
+    def inject_secret_file_paths(self):
+        # If the value is the content (Docker secret), infer the path
+        secret_base = Path("/run/secrets")
+        if not self.FIREBASE_ADMINSDK_PATH and (secret_base / "FIREBASE_ADMINSDK").exists():
+            self.FIREBASE_ADMINSDK_PATH = secret_base / "FIREBASE_ADMINSDK"
+
+        if not self.CA_PATH and (secret_base / "CA").exists():
+            self.CA_PATH = secret_base / "CA"
+
+        if not self.FASTAPI_CLIENT_CERT_PATH and (secret_base / "FASTAPI_CLIENT_CERT").exists():
+            self.FASTAPI_CLIENT_CERT_PATH = secret_base / "FASTAPI_CLIENT_CERT"
+
+        if not self.FASTAPI_CLIENT_KEY_PATH and (secret_base / "FASTAPI_CLIENT_KEY").exists():
+            self.FASTAPI_CLIENT_KEY_PATH = secret_base / "FASTAPI_CLIENT_KEY"
+
+        return self
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", secrets_dir="/run/secrets")
 
@@ -59,12 +85,14 @@ def get_settings():
     my_logger.warning(f"DATABASE_URL: {s.DATABASE_URL}\n")
 
     # REDIS & TASKIQ
+    my_logger.warning(f"CA_PATH: {s.CA_PATH}")
+    my_logger.warning(f"FASTAPI_CLIENT_CERT_PATH: {s.FASTAPI_CLIENT_CERT_PATH}")
+    my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {s.FASTAPI_CLIENT_KEY_PATH}")
     my_logger.warning(f"REDIS_HOST: {s.REDIS_HOST}")
     my_logger.warning(f"REDIS_PASSWORD: {s.REDIS_PASSWORD[:3]}{'*' * (len(s.REDIS_PASSWORD) - 3) if s.REDIS_PASSWORD else ''}\n")
 
     # FIREBASE
-    my_logger.warning(f"firebase_adminsdk: {s.FIREBASE_ADMINSDK}, type: {type(s.FIREBASE_ADMINSDK)}")
-    my_logger.warning(f"firebase_adminsdk json: {json.loads(s=s.FIREBASE_ADMINSDK)}, type: {type(json.loads(s=s.FIREBASE_ADMINSDK))}")
+    my_logger.warning(f"FIREBASE_ADMINSDK_PATH: {s.FIREBASE_ADMINSDK_PATH}\n")
 
     # S3
     my_logger.warning(f"S3_ACCESS_KEY_ID: {s.S3_ACCESS_KEY_ID}")
@@ -80,6 +108,6 @@ def get_settings():
     my_logger.warning(f"REFRESH_TOKEN_EXPIRE_TIME: {s.REFRESH_TOKEN_EXPIRE_TIME}\n")
 
     # EMAIL
-    my_logger.warning(f"EMAIL_SERVICE_API_KEY: {s.EMAIL_SERVICE_API_KEY[:4]}{'*' * (len(s.EMAIL_SERVICE_API_KEY) - 4) if s.EMAIL_SERVICE_API_KEY else ''}")
+    my_logger.warning(f"EMAIL_SERVICE_API_KEY: {s.EMAIL_SERVICE_API_KEY[:4]}{'*' * (len(s.EMAIL_SERVICE_API_KEY) - 4) if s.EMAIL_SERVICE_API_KEY else ''}\n")
 
     return s
