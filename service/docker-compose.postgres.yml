@@ -86,4 +86,5 @@ secrets:
 networks:
   postgres_network:
     attachable: true
+    external: true
     name: postgres_default

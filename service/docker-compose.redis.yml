@@ -63,4 +63,5 @@ secrets:
 networks:
   redis_network:
     attachable: true
+    external: true
     name: redis_default
