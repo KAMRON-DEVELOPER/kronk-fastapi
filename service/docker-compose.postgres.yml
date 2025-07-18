@@ -15,7 +15,11 @@ services:
       - ca.pem
       - pg_server_cert.pem
       - fastapi_client_cert.pem
-      - fastapi_client_key.pem
+      - source: fastapi_client_key.pem
+        target: /var/lib/postgresql/certs/fastapi_client_key.pem
+        mode: 0600
+        uid: "70"
+        gid: "70"
       - source: pg_server_key.pem
         target: /var/lib/postgresql/certs/pg_server_key.pem
         mode: 0600
@@ -26,10 +30,10 @@ services:
       - POSTGRES_USER_FILE=/run/secrets/POSTGRES_USER
       - POSTGRES_PASSWORD_FILE=/run/secrets/POSTGRES_PASSWORD
     volumes:
-      - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
+      # - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
       - ./configurations/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./configurations/postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
-      # - ./volumes/postgres_storage:/var/lib/postgresql/data
+      - ./volumes/postgres_storage:/var/lib/postgresql/data
     # healthcheck:
     #   test:
     #     [

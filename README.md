@@ -43,33 +43,21 @@ docker secret create docker_client_key.pem docker-client-key.pem
 
 # **************** 3. 🔐 Redis and PostgreSQL TLS (for FastAPI) ****************
 
-# Redis Prod
+# Redis
 mkdir -p ~/certs/redis && cd ~/certs/redis
 openssl genrsa -out redis-server-key.pem 4096
-openssl req -new -key redis-server-key.pem -out redis-server-prod.csr -subj "/CN=redis.kronk.uz"
-echo "subjectAltName = DNS:redis.kronk.uz" > redis-ext-prod.cnf
-echo "extendedKeyUsage = serverAuth" >> redis-ext-prod.cnf
-openssl x509 -req -in redis-server-prod.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out redis-server-prod-cert.pem -days 3650 -sha256 -extfile redis-ext-prod.cnf
+openssl req -new -key redis-server-key.pem -out redis-server.csr -subj "/CN=redis.kronk.uz"
+echo "subjectAltName = DNS:localhost,DNS:redis.kronk.uz,IP:127.0.0.1" > redis-ext.cnf
+echo "extendedKeyUsage = serverAuth" >> redis-ext.cnf
+openssl x509 -req -in redis-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out redis-server-cert.pem -days 3650 -sha256 -extfile redis-ext.cnf
 
-# Redis Dev
-openssl req -new -key redis-server-key.pem -out redis-server-dev.csr -subj "/CN=127.0.0.1"
-echo "subjectAltName = DNS:localhost,IP:127.0.0.1" > redis-ext-dev.cnf
-echo "extendedKeyUsage = serverAuth" >> redis-ext-dev.cnf
-openssl x509 -req -in redis-server-dev.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out redis-server-dev-cert.pem -days 3650 -sha256 -extfile redis-ext-dev.cnf
-
-# PostgreSQL Prod
+# PostgreSQL
 mkdir -p ~/certs/postgres && cd ~/certs/postgres
 openssl genrsa -out pg-server-key.pem 4096
-openssl req -new -key pg-server-key.pem -out pg-server-prod.csr -subj "/CN=postgres.kronk.uz"
-echo "subjectAltName = DNS:postgres.kronk.uz" > pg-ext-prod.cnf
-echo "extendedKeyUsage = serverAuth" >> pg-ext-prod.cnf
-openssl x509 -req -in pg-server-prod.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out pg-server-prod-cert.pem -days 3650 -sha256 -extfile pg-ext-prod.cnf
-
-# PostgreSQL Dev
-openssl req -new -key pg-server-key.pem -out pg-server-dev.csr -subj "/CN=127.0.0.1"
-echo "subjectAltName = DNS:localhost,IP:127.0.0.1" > pg-ext-dev.cnf
-echo "extendedKeyUsage = serverAuth" >> pg-ext-dev.cnf
-openssl x509 -req -in pg-server-dev.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out pg-server-dev-cert.pem -days 3650 -sha256 -extfile pg-ext-dev.cnf
+openssl req -new -key pg-server-key.pem -out pg-server.csr -subj "/CN=postgres.kronk.uz"
+echo "subjectAltName = DNS:localhost,DNS:postgres.kronk.uz,IP:127.0.0.1" > pg-ext.cnf
+echo "extendedKeyUsage = serverAuth" >> pg-ext.cnf
+openssl x509 -req -in pg-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out pg-server-cert.pem -days 3650 -sha256 -extfile pg-ext.cnf
 
 # FastAPI Client (shared for Redis and PostgreSQL)
 mkdir -p ~/certs/fastapi && cd ~/certs/fastapi
@@ -97,7 +85,10 @@ sudo cp ~/certs/ca/ca.pem /etc/docker/certs/
 
 ```json
 {
-  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+  "hosts": [
+    "unix:///var/run/docker.sock",
+    "tcp://0.0.0.0:2376"
+  ],
   "tls": true,
   "tlsverify": true,
   "tlscacert": "/etc/docker/certs/ca.pem",
@@ -231,6 +222,12 @@ echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
 # REDIS
 echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "localhost" | docker secret create REDIS_HOST -
+
+mkdir -p volumes/redis_storage
+mkdir -p volumes/postgres_storage
+
+docker stack deploy -c docker-compose.redis.yml redis -d
+docker stack deploy -c docker-compose.postgres.yml postgres -d
 ```
 
 ---
@@ -244,17 +241,26 @@ docker swarm join-token worker
 docker swarm join --token <TOKEN> <MANAGER_NODE_PUBLIC_IP>:2377
 ```
 
+---
+---
+
 ## 6. 🌐 Create Overlay Network
 
 ```bash
 docker network create --driver=overlay --attachable traefik-public
 ```
 
+---
+---
+
 ## 7. 🔐 Set Permissions on ACME File
 
 ```bash
 chmod 600 cluster/swarm/traefik/config/acme.json
 ```
+
+---
+---
 
 ## 8. 📆 Deploy Services
 
@@ -266,3 +272,37 @@ docker stack deploy -c cluster/swarm/backend/backend_stack.yml backend-stack
 docker stack deploy -c cluster/swarm/monitoring/portainer.yml monitoring-stack
 docker stack deploy -c cluster/swarm/monitoring/grafana.yml monitoring-stack
 ```
+
+---
+---
+
+## Tips & Tricks
+
+### Connecting to postgres
+
+```bash
+# first
+~/Documents/fastapi/kronk-backend-production/service master !3 ❯ CONTAINER_ID=$(docker ps -qf "name=postgres_postgres")                                            ✘ INT
+~/Documents/fastapi/kronk-backend-production/service master !3 ❯ docker exec -it $CONTAINER_ID /bin/sh -c '
+export PGPASSWORD=$(cat /run/secrets/POSTGRES_PASSWORD)
+export PGSSLMODE=verify-full
+export PGSSLROOTCERT=/run/secrets/ca.pem
+export PGSSLCERT=/run/secrets/fastapi_client_cert.pem
+export PGSSLKEY=/var/lib/postgresql/certs/fastapi_client_key.pem
+psql -h localhost -d $(cat /run/secrets/POSTGRES_DB) -U $(cat /run/secrets/POSTGRES_USER)
+'
+
+# second
+~/Documents/fastapi/kronk-backend-production/service master !3 ❯ PGPASSWORD=kamronbek2003 \                                                                           5s
+PGSSLMODE=verify-full \
+PGSSLROOTCERT=~/certs/ca/ca.pem \
+PGSSLCERT=~/certs/fastapi/fastapi-client-cert.pem \
+PGSSLKEY=~/certs/fastapi/fastapi-client-key.pem \
+psql -h 127.0.0.1 -U kamronbek -d kronk_db
+
+# third
+psql "sslmode=verify-full sslrootcert=/home/kamronbek/certs/ca/ca.pem sslcert=/home/kamronbek/certs/fastapi/fastapi-client-cert.pem sslkey=/home/kamronbek/certs/fastapi/fastapi-client-key.pem host=localhost hostaddr=127.0.0.1 port=5432 user=kamronbek dbname=kronk_db"
+```
+
+---
+---
