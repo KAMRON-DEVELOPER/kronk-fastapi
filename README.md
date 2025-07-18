@@ -143,6 +143,9 @@ echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
 echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?ssl=verify-full&slrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | sudo tee /run/secrets/DATABASE_URL
 
 # REDIS for fastapi & uvicorn
+sudo cp certs/ca/ca.pem /run/secrets/ca.pem
+sudi cp certs/fastapi/fastapi-client-cert.pem /run/secrets/fastapi_client_cert.pem
+sudo cp certs/fastapi/fastapi-client-key.pem /run/secrets/fastapi_client_key.pem
 echo "kamronbek2003" | sudo tee /run/secrets/REDIS_PASSWORD
 echo "localhost" | sudo tee /run/secrets/REDIS_HOST
 

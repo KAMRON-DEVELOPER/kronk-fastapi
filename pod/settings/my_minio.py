@@ -11,6 +11,7 @@ from miniopy_async.helpers import ObjectWriteResult
 
 from settings.my_config import get_settings
 from utility.my_logger import my_logger
+
 settings = get_settings()
 
 minio_client: Minio = Minio(
@@ -26,7 +27,7 @@ async def minio_ready() -> bool:
     try:
         if not await minio_client.bucket_exists(bucket_name=settings.S3_BUCKET_NAME):
             await minio_client.make_bucket(bucket_name=settings.S3_BUCKET_NAME)
-            await minio_client.set_bucket_policy("my-bucket", json.dumps(policy))
+            await minio_client.set_bucket_policy(settings.S3_BUCKET_NAME, json.dumps(policy))
         return True
     except Exception as e:
         print(f"🌋 Failed in check_if_bucket_exists: {e}")
