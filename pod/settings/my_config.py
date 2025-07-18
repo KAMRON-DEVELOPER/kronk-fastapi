@@ -75,6 +75,11 @@ def get_settings():
 
     my_logger.warning("🔧 get_settings(): Loaded configuration values...\n")
 
+    ca_path = s.BASE_DIR / "certs/ca/ca.pem"
+    my_logger.warning(f"ca_path exist: {ca_path.exists()}")
+    my_logger.warning(f"ca_path: {ca_path}")
+    my_logger.warning(f"str(ca_path): {str(ca_path)}\n")
+
     # General
     my_logger.warning(f"BASE_DIR: {s.BASE_DIR}")
     my_logger.warning(f"TEMP_IMAGES_FOLDER_PATH: {s.TEMP_IMAGES_FOLDER_PATH}")

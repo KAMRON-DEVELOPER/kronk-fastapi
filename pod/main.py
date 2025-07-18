@@ -24,19 +24,67 @@ from utility.my_logger import my_logger
 settings = get_settings()
 
 
+# @asynccontextmanager
+# async def app_lifespan(_app: FastAPI):
+#     await initialize_redis_indexes()
+#     await initialize_db()
+#     initialize_firebase()
+#     instrumentator.expose(_app)
+#     if not broker.is_worker_process:
+#         print("Starting broker")
+#         await broker.startup()
+#     yield
+#     if not broker.is_worker_process:
+#         print("Shutting down broker")
+#         await broker.shutdown()
+
 @asynccontextmanager
 async def app_lifespan(_app: FastAPI):
-    await initialize_redis_indexes()
-    await initialize_db()
-    initialize_firebase()
-    instrumentator.expose(_app)
-    if not broker.is_worker_process:
-        print("Starting broker")
-        await broker.startup()
+    my_logger.warning("🚀 Starting app_lifespan...")
+
+    try:
+        my_logger.warning("🧪 init redis...")
+        await initialize_redis_indexes()
+        my_logger.warning("✅ redis ready")
+    except Exception as e:
+        my_logger.exception("❌ Redis init failed", exc_info=e)
+
+    try:
+        my_logger.warning("🧪 init db...")
+        await initialize_db()
+        my_logger.warning("✅ db ready")
+    except Exception as e:
+        my_logger.exception("❌ DB init failed", exc_info=e)
+
+    try:
+        my_logger.warning("🧪 init firebase...")
+        initialize_firebase()
+        my_logger.warning("✅ firebase ready")
+    except Exception as e:
+        my_logger.exception("❌ Firebase init failed", exc_info=e)
+
+    try:
+        instrumentator.expose(_app)
+    except Exception as e:
+        my_logger.exception("❌ Prometheus expose failed", exc_info=e)
+
+    try:
+        if not broker.is_worker_process:
+            my_logger.warning("🔄 Starting broker...")
+            await broker.startup()
+            my_logger.warning("✅ Broker ready")
+    except Exception as e:
+        my_logger.exception("❌ Broker startup failed", exc_info=e)
+
     yield
-    if not broker.is_worker_process:
-        print("Shutting down broker")
-        await broker.shutdown()
+
+    try:
+        if not broker.is_worker_process:
+            my_logger.warning("🔻 Shutting down broker...")
+            await broker.shutdown()
+            my_logger.warning("✅ Broker shutdown complete")
+    except Exception as e:
+        my_logger.exception("❌ Broker shutdown failed", exc_info=e)
 
 
 app: FastAPI = FastAPI(lifespan=app_lifespan)

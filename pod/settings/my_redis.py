@@ -29,14 +29,14 @@ my_cache_redis: CacheRedis = CacheRedis(
     decode_responses=True,
     auto_close_connection_pool=True,
     ssl=True,
-    ssl_ca_certs=settings.CA,
-    ssl_certfile=settings.FASTAPI_CLIENT_CERT,
-    ssl_keyfile=settings.FASTAPI_CLIENT_KEY,
-    # ssl_ca_certs="/run/secrets/ca.pem",
-    # ssl_certfile="/run/secrets/fastapi_client_cert.pem",
-    # ssl_keyfile="/run/secrets/fastapi_client_key.pem",
+    # ssl_ca_certs=settings.CA_PATH,
+    # ssl_certfile=settings.FASTAPI_CLIENT_CERT_PATH,
+    # ssl_keyfile=settings.FASTAPI_CLIENT_KEY_PATH,
+    ssl_ca_certs=str(settings.BASE_DIR / "certs/ca/ca.pem"),
+    ssl_certfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-cert.pem"),
+    ssl_keyfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-key.pem"),
     ssl_cert_reqs="required",
-    ssl_check_hostname=True
+    # ssl_check_hostname=True
 )
 my_search_redis: SearchRedis = SearchRedis(
     host=settings.REDIS_HOST,
@@ -44,14 +44,14 @@ my_search_redis: SearchRedis = SearchRedis(
     db=0,
     decode_responses=True,
     ssl=True,
-    ssl_ca_certs=settings.CA,
-    ssl_certfile=settings.FASTAPI_CLIENT_CERT,
-    ssl_keyfile=settings.FASTAPI_CLIENT_KEY,
-    # ssl_ca_certs="/run/secrets/ca.pem",
-    # ssl_certfile="/run/secrets/fastapi_client_cert.pem",
-    # ssl_keyfile="/run/secrets/fastapi_client_key.pem",
+    # ssl_ca_certs=settings.CA_PATH,
+    # ssl_certfile=settings.FASTAPI_CLIENT_CERT_PATH,
+    # ssl_keyfile=settings.FASTAPI_CLIENT_KEY_PATH,
+    ssl_ca_certs=str(settings.BASE_DIR / "certs/ca/ca.pem"),
+    ssl_certfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-cert.pem"),
+    ssl_keyfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-key.pem"),
     ssl_cert_reqs="required",
-    ssl_check_hostname=True,
+    # ssl_check_hostname=True,
 )
 
 USER_INDEX_NAME = "idx:users"
@@ -70,6 +70,11 @@ async def redis_ready() -> bool:
 
 async def initialize_redis_indexes() -> None:
     try:
+        my_logger.warning(f"redis_ready() starting...")
+        ready = await redis_ready()
+        my_logger.warning(f"redis_ready() done, ready? {ready}")
+
+        my_logger.debug(f"creating index...")
         await my_search_redis.search.create(
             index=USER_INDEX_NAME, on=PureToken.HASH, schema=[Field("email", PureToken.TEXT), Field("username", PureToken.TEXT)], prefixes=["users:"]
         )
