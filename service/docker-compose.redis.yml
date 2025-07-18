@@ -6,8 +6,13 @@ services:
       - -c
       - |
         redis-server /redis.conf --requirepass "$$(cat /run/secrets/REDIS_PASSWORD)"
+    # ports:
+    #   - "6379:6379"
     ports:
-      - "6379:6379"
+      - target: 6379
+        published: 6379
+        protocol: tcp
+        mode: host
     secrets:
       - REDIS_PASSWORD
       - ca.pem

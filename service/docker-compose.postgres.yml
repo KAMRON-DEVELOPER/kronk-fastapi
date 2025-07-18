@@ -6,8 +6,13 @@ services:
       - postgres
       - -c
       - config_file=/etc/postgresql/postgresql.conf
+    # ports:
+    #   - "5432:5432"
     ports:
-      - "5432:5432"
+      - target: 5432
+        published: 5432
+        protocol: tcp
+        mode: host
     secrets:
       - POSTGRES_DB
       - POSTGRES_USER
