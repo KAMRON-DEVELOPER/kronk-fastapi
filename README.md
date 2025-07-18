@@ -223,6 +223,9 @@ echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
 echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "localhost" | docker secret create REDIS_HOST -
 
+docker network create --driver overlay --attachable redis_default
+docker network create --driver overlay --attachable postgres_default
+
 mkdir -p volumes/redis_storage
 mkdir -p volumes/postgres_storage
 
