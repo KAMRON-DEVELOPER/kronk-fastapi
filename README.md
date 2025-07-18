@@ -225,6 +225,15 @@ echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
 # REDIS
 echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "localhost" | docker secret create REDIS_HOST -
+
+docker network create --driver overlay --attachable redis_default
+docker network create --driver overlay --attachable postgres_default
+
+mkdir -p volumes/redis_storage
+mkdir -p volumes/postgres_storage
+
+docker stack deploy -c docker-compose.redis.yml redis -d
+docker stack deploy -c docker-compose.postgres.yml postgres -d
 ```
 
 ---
@@ -238,17 +247,26 @@ docker swarm join-token worker
 docker swarm join --token <TOKEN> <MANAGER_NODE_PUBLIC_IP>:2377
 ```
 
+---
+---
+
 ## 6. 🌐 Create Overlay Network
 
 ```bash
 docker network create --driver=overlay --attachable traefik-public
 ```
 
+---
+---
+
 ## 7. 🔐 Set Permissions on ACME File
 
 ```bash
 chmod 600 cluster/swarm/traefik/config/acme.json
 ```
+
+---
+---
 
 ## 8. 📆 Deploy Services
 
@@ -261,11 +279,14 @@ docker stack deploy -c cluster/swarm/monitoring/portainer.yml monitoring-stack
 docker stack deploy -c cluster/swarm/monitoring/grafana.yml monitoring-stack
 ```
 
-# Tips & Tricks
+---
+---
 
-## Connecting to postgres
+## Tips & Tricks
 
-```
+### Connecting to postgres
+
+```bash
 # first
 ~/Documents/fastapi/kronk-backend-production/service master !3 ❯ CONTAINER_ID=$(docker ps -qf "name=postgres_postgres")                                            ✘ INT
 ~/Documents/fastapi/kronk-backend-production/service master !3 ❯ docker exec -it $CONTAINER_ID /bin/sh -c '
@@ -277,5 +298,23 @@ export PGSSLKEY=/var/lib/postgresql/certs/fastapi_client_key.pem
 psql -h localhost -d $(cat /run/secrets/POSTGRES_DB) -U $(cat /run/secrets/POSTGRES_USER)
 '
 
+# second
+~/Documents/fastapi/kronk-backend-production/service master !3 ❯ PGPASSWORD=kamronbek2003 \                                                                           5s
+PGSSLMODE=verify-full \
+PGSSLROOTCERT=~/certs/ca/ca.pem \
+PGSSLCERT=~/certs/fastapi/fastapi-client-cert.pem \
+PGSSLKEY=~/certs/fastapi/fastapi-client-key.pem \
+psql -h 127.0.0.1 -U kamronbek -d kronk_db
 
+# third
+psql "sslmode=verify-full sslrootcert=/home/kamronbek/certs/ca/ca.pem sslcert=/home/kamronbek/certs/fastapi/fastapi-client-cert.pem sslkey=/home/kamronbek/certs/fastapi/fastapi-client-key.pem host=localhost hostaddr=127.0.0.1 port=5432 user=kamronbek dbname=kronk_db"
 ```
+
+### Connecting to redis
+
+```bash
+redis-cli --tls --cacert ~/certs/ca/ca.pem --cert ~/certs/fastapi/fastapi-client-cert.pem --key ~/certs/fastapi/fastapi-client-key.pem -a kamronbek2003
+```
+
+---
+---
