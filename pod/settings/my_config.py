@@ -2,16 +2,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import model_validator, FilePath
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from utility.my_logger import my_logger
 
 
 class Settings(BaseSettings):
-    BASE_DIR: Path = Path(__file__).parent.parent.parent.resolve()
-    TEMP_IMAGES_FOLDER_PATH: Path = Path(__file__).parent.parent.parent.resolve() / "static/images"
-    TEMP_VIDEOS_FOLDER_PATH: Path = Path(__file__).parent.parent.resolve() / "static/videos"
+    BASE_DIR: Path = Path(__file__).parent.parent.resolve()
+    TEMP_IMAGES_FOLDER_PATH: Path = BASE_DIR / "static/images"
+    TEMP_VIDEOS_FOLDER_PATH: Path = BASE_DIR / "static/videos"
 
     DEBUG: int = 1
 
@@ -19,17 +19,17 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
 
     # REDIS & TASKIQ
-    CA: str = ""
-    CA_PATH: str = "certs/ca/ca.pem"
-    FASTAPI_CLIENT_CERT: str = ""
-    FASTAPI_CLIENT_CERT_PATH: str = "certs/fastapi/fastapi-client-cert.pem"
-    FASTAPI_CLIENT_KEY: str = ""
-    FASTAPI_CLIENT_KEY_PATH: str = "certs/fastapi/fastapi-client-key.pem"
+    CA: Optional[str] = None
+    FASTAPI_CLIENT_CERT: Optional[str] = None
+    FASTAPI_CLIENT_KEY: Optional[str] = None
+    CA_PATH: Path = BASE_DIR / "certs/ca.pem"
+    FASTAPI_CLIENT_CERT_PATH: Path = BASE_DIR / "certs/fastapi-client-cert.pem"
+    FASTAPI_CLIENT_KEY_PATH: Path = BASE_DIR / "certs/fastapi-client-key.pem"
     REDIS_HOST: str = ""
 
     # FIREBASE ADMIN SDK
-    FIREBASE_ADMINSDK: str = ""
-    FIREBASE_ADMINSDK_PATH: Optional[FilePath] = None
+    FIREBASE_ADMINSDK: Optional[str] = None
+    FIREBASE_ADMINSDK_PATH: Path = BASE_DIR / "certs/kronk-production-firebase-adminsdk.json"
 
     # S3
     S3_ACCESS_KEY_ID: str = ""
@@ -55,13 +55,13 @@ class Settings(BaseSettings):
             self.FIREBASE_ADMINSDK_PATH = secret_base / "FIREBASE_ADMINSDK"
 
         if not self.CA_PATH and (secret_base / "CA").exists():
-            self.CA_PATH = str(secret_base / "CA")
+            self.CA_PATH = secret_base / "CA"
 
         if not self.FASTAPI_CLIENT_CERT_PATH and (secret_base / "FASTAPI_CLIENT_CERT").exists():
-            self.FASTAPI_CLIENT_CERT_PATH = str(secret_base / "FASTAPI_CLIENT_CERT")
+            self.FASTAPI_CLIENT_CERT_PATH = secret_base / "FASTAPI_CLIENT_CERT"
 
         if not self.FASTAPI_CLIENT_KEY_PATH and (secret_base / "FASTAPI_CLIENT_KEY").exists():
-            self.FASTAPI_CLIENT_KEY_PATH = str(secret_base / "FASTAPI_CLIENT_KEY")
+            self.FASTAPI_CLIENT_KEY_PATH = secret_base / "FASTAPI_CLIENT_KEY"
 
         return self
 
@@ -85,8 +85,8 @@ def get_settings():
     # REDIS & TASKIQ
     my_logger.warning(f"CA_PATH: {str(s.BASE_DIR / s.CA_PATH)}")
     my_logger.warning(f"FASTAPI_CLIENT_CERT_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_CERT_PATH)}")
-    my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_KEY_PATH)}\n")
-    my_logger.warning(f"REDIS_HOST: {s.REDIS_HOST}")
+    my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_KEY_PATH)}")
+    my_logger.warning(f"REDIS_HOST: {s.REDIS_HOST}\n")
 
     # FIREBASE
     my_logger.warning(f"FIREBASE_ADMINSDK_PATH: {s.FIREBASE_ADMINSDK_PATH}\n")

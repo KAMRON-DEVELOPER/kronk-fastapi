@@ -28,9 +28,9 @@ my_cache_redis: CacheRedis = CacheRedis(
     decode_responses=True,
     auto_close_connection_pool=True,
     ssl=True,
-    ssl_ca_certs=str(settings.BASE_DIR / settings.CA_PATH),
-    ssl_certfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_CERT_PATH),
-    ssl_keyfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_KEY_PATH),
+    ssl_ca_certs=str(settings.CA_PATH),
+    ssl_certfile=str(settings.FASTAPI_CLIENT_CERT_PATH),
+    ssl_keyfile=str(settings.FASTAPI_CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
     ssl_check_hostname=True
 )
@@ -39,9 +39,9 @@ my_search_redis: SearchRedis = SearchRedis(
     db=0,
     decode_responses=True,
     ssl=True,
-    ssl_ca_certs=str(settings.BASE_DIR / settings.CA_PATH),
-    ssl_certfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_CERT_PATH),
-    ssl_keyfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_KEY_PATH),
+    ssl_ca_certs=str(settings.CA_PATH),
+    ssl_certfile=str(settings.FASTAPI_CLIENT_CERT_PATH),
+    ssl_keyfile=str(settings.FASTAPI_CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
     ssl_check_hostname=True,
 )
