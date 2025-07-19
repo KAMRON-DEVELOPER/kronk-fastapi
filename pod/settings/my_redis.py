@@ -60,11 +60,13 @@ feed_INDEX_NAME = "idx:feeds"
 
 async def redis_ready() -> bool:
     try:
-        await my_cache_redis.ping()
-        await my_search_redis.ping()
+        my_cache_redis_ping_result = await my_cache_redis.ping()
+        my_search_redis_ping_result = await my_search_redis.ping()
+        my_logger.exception(f"my_cache_redis_ping_result: {my_cache_redis_ping_result}")
+        my_logger.exception(f"my_search_redis_ping_result: {my_search_redis_ping_result}")
         return True
     except Exception as e:
-        print(f"🌋 Failed in redis_om_ready: {e}")
+        my_logger.exception(f"redis_ready: {e}")
         return False
 
 
