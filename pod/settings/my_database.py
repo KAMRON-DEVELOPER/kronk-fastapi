@@ -13,8 +13,8 @@ from utility.my_logger import my_logger
 
 settings = get_settings()
 
-ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(settings.BASE_DIR / settings.CA_PATH))
-ssl_context.load_cert_chain(certfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_CERT_PATH), keyfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_KEY_PATH))
+ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(settings.CA_PATH))
+ssl_context.load_cert_chain(certfile=str(settings.FASTAPI_CLIENT_CERT_PATH), keyfile=str(settings.FASTAPI_CLIENT_KEY_PATH))
 ssl_context.check_hostname = True
 ssl_context.verify_mode = ssl.CERT_REQUIRED
 
