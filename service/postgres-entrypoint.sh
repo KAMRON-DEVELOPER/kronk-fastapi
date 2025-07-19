@@ -29,6 +29,7 @@ echo "Starting PostgreSQL with SSL-only configuration..."
 # Pass control to the official entrypoint with SSL-enforced configuration
 exec docker-entrypoint.sh postgres \
     -c config_file=/etc/postgresql/postgresql.conf \
+    -c hba_file=/etc/postgresql/pg_hba.conf \
     -c ssl_key_file='/tmp/pg-server-key.pem' \
     -c log_connections=on \
     -c log_disconnections=on \
