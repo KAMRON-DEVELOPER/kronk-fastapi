@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     FASTAPI_CLIENT_KEY: str = ""
     FASTAPI_CLIENT_KEY_PATH: str = "certs/fastapi/fastapi-client-key.pem"
     REDIS_HOST: str = ""
-    REDIS_PASSWORD: str = ""
 
     # FIREBASE ADMIN SDK
     FIREBASE_ADMINSDK: str = ""
@@ -88,7 +87,6 @@ def get_settings():
     my_logger.warning(f"FASTAPI_CLIENT_CERT_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_CERT_PATH)}")
     my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_KEY_PATH)}\n")
     my_logger.warning(f"REDIS_HOST: {s.REDIS_HOST}")
-    my_logger.warning(f"REDIS_PASSWORD: {s.REDIS_PASSWORD[:3]}{'*' * (len(s.REDIS_PASSWORD) - 3) if s.REDIS_PASSWORD else ''}\n")
 
     # FIREBASE
     my_logger.warning(f"FIREBASE_ADMINSDK_PATH: {s.FIREBASE_ADMINSDK_PATH}\n")

@@ -24,7 +24,6 @@ settings = get_settings()
 
 my_cache_redis: CacheRedis = CacheRedis(
     host=settings.REDIS_HOST,
-    password=settings.REDIS_PASSWORD,
     db=0,
     decode_responses=True,
     auto_close_connection_pool=True,
@@ -37,7 +36,6 @@ my_cache_redis: CacheRedis = CacheRedis(
 )
 my_search_redis: SearchRedis = SearchRedis(
     host=settings.REDIS_HOST,
-    password=settings.REDIS_PASSWORD,
     db=0,
     decode_responses=True,
     ssl=True,

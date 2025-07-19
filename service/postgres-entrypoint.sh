@@ -31,6 +31,6 @@ exec docker-entrypoint.sh postgres \
     -c config_file=/etc/postgresql/postgresql.conf \
     -c hba_file=/etc/postgresql/pg_hba.conf \
     -c ssl_key_file='/tmp/pg-server-key.pem' \
-    -c log_connections=on \
-    -c log_disconnections=on \
+    -c log_connections=off \
+    -c log_disconnections=off \
     -c log_statement=all
