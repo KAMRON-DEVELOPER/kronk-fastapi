@@ -20,11 +20,11 @@ class Settings(BaseSettings):
 
     # REDIS & TASKIQ
     CA: str = ""
-    CA_PATH: str = "/certs/ca/ca.pem"
+    CA_PATH: str = "certs/ca/ca.pem"
     FASTAPI_CLIENT_CERT: str = ""
-    FASTAPI_CLIENT_CERT_PATH: str = "/certs/fastapi/fastapi-client-cert.pem"
+    FASTAPI_CLIENT_CERT_PATH: str = "certs/fastapi/fastapi-client-cert.pem"
     FASTAPI_CLIENT_KEY: str = ""
-    FASTAPI_CLIENT_KEY_PATH: str = "/certs/fastapi/fastapi-client-key.pem"
+    FASTAPI_CLIENT_KEY_PATH: str = "certs/fastapi/fastapi-client-key.pem"
     REDIS_HOST: str = ""
     REDIS_PASSWORD: str = ""
 

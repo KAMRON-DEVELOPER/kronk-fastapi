@@ -10,9 +10,39 @@
 # **************** 1. 🔐 Certificate Authority (CA) ****************
 mkdir -p ~/certs/ca && cd ~/certs/ca
 openssl genrsa -aes256 -out ca-key.pem 4096
-openssl req -new -x509 -days 3650 -key ca-key.pem -sha256 -out ca.pem -subj "/CN=Kronk Root CA"
 
+cat > ca.cnf <<EOF
+[req]
+distinguished_name = dn
+[dn]
+[ext]
+basicConstraints = critical,CA:true
+keyUsage = critical,keyCertSign,cRLSign
+EOF
 
+cat > ca.cnf <<EOF
+[ req ]
+default_bits = 4096
+prompt = no
+default_md = sha256
+distinguished_name = dn
+
+[ dn ]
+C = US
+ST = California
+L = San Francisco
+O = YourOrg
+CN = YourCA
+
+[ v3_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+EOF
+ 
+openssl req -new -x509 -days 3650 -key ca-key.pem -sha256 -out ca.pem -subj "/CN=Kronk Root CA" -config ca.cnf -extensions ext
+openssl req -new -x509 -days 3650 -key ca-key.pem -sha256 -out ca.pem -subj "/CN=Kronk Root CA" -config ca.cnf -extensions v3_ca
 
 
 # **************** 2. 🔐 Docker Daemon TLS (for Prometheus) ****************
@@ -47,8 +77,15 @@ docker secret create docker_client_key.pem docker-client-key.pem
 mkdir -p ~/certs/redis && cd ~/certs/redis
 openssl genrsa -out redis-server-key.pem 4096
 openssl req -new -key redis-server-key.pem -out redis-server.csr -subj "/CN=redis.kronk.uz"
+
+cat > redis-ext.cnf <<EOF
+subjectAltName = DNS:localhost,DNS:redis.kronk.uz,IP:127.0.0.1
+extendedKeyUsage = serverAuth
+EOF
+
 echo "subjectAltName = DNS:localhost,DNS:redis.kronk.uz,IP:127.0.0.1" > redis-ext.cnf
 echo "extendedKeyUsage = serverAuth" >> redis-ext.cnf
+
 openssl x509 -req -in redis-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out redis-server-cert.pem -days 3650 -sha256 -extfile redis-ext.cnf
 
 # PostgreSQL
@@ -63,7 +100,13 @@ openssl x509 -req -in pg-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CA
 mkdir -p ~/certs/fastapi && cd ~/certs/fastapi
 openssl genrsa -out fastapi-client-key.pem 4096
 openssl req -new -key fastapi-client-key.pem -out fastapi-client.csr -subj "/CN=fastapi"
+
+cat > client-ext.cnf <<EOF
+extendedKeyUsage = clientAuth
+EOF
+
 echo "extendedKeyUsage = clientAuth" > client-ext.cnf
+
 openssl x509 -req -in fastapi-client.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out fastapi-client-cert.pem -days 3650 -sha256 -extfile client-ext.cnf
 ```
 
@@ -140,7 +183,7 @@ You can link or copy secrets manually:
 echo "kronk_db" | docker secret create POSTGRES_DB -
 echo "kamronbek" | docker secret create POSTGRES_USER -
 echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
-echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?ssl=verify-full&slrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | sudo tee /run/secrets/DATABASE_URL
+echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?sslmode=verify-full&slrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | sudo tee /run/secrets/DATABASE_URL
 
 # REDIS for fastapi & uvicorn
 sudo cp certs/ca/ca.pem /run/secrets/ca.pem
