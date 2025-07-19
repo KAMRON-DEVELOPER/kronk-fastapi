@@ -21,11 +21,19 @@ services:
       - POSTGRES_DB_FILE=/run/secrets/POSTGRES_DB
       - POSTGRES_USER_FILE=/run/secrets/POSTGRES_USER
       - POSTGRES_PASSWORD_FILE=/run/secrets/POSTGRES_PASSWORD
+      # Additional security environment variables
+      - POSTGRES_INITDB_ARGS=--auth-host=cert --auth-local=peer
     volumes:
       - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
       - ./configurations/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./configurations/postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       - ./volumes/postgres_storage:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'PGPASSWORD="$$(cat /run/secrets/POSTGRES_PASSWORD)" pg_isready -U "$$(cat /run/secrets/POSTGRES_USER)" -d "$$(cat /run/secrets/POSTGRES_DB)" --timeout=5',
+        ]
     # healthcheck:
     #   test:
     #     [
@@ -45,7 +53,11 @@ services:
     #   - -c
     #   - |
     #     redis-server /redis-stack.conf
-    command: ["redis-server", "/redis-stack.conf"]
+    command:
+      [
+        "redis-server",
+        "/redis-stack.conf",
+      ]
     ports:
       - "6379:6379"
     networks:
