@@ -144,7 +144,7 @@ echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?ssl=v
 
 # REDIS for fastapi & uvicorn
 sudo cp certs/ca/ca.pem /run/secrets/ca.pem
-sudi cp certs/fastapi/fastapi-client-cert.pem /run/secrets/fastapi_client_cert.pem
+sudo cp certs/fastapi/fastapi-client-cert.pem /run/secrets/fastapi_client_cert.pem
 sudo cp certs/fastapi/fastapi-client-key.pem /run/secrets/fastapi_client_key.pem
 echo "kamronbek2003" | sudo tee /run/secrets/REDIS_PASSWORD
 echo "localhost" | sudo tee /run/secrets/REDIS_HOST
@@ -154,10 +154,10 @@ echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "localhost" | docker secret create REDIS_HOST -
 
 # Firebase
-cp ./secrets/firebase-adminsdk.json /run/secrets/FIREBASE_ADMINSDK
+sudo cp certs/kronk-production-firebase-adminsdk.json /run/secrets/FIREBASE_ADMINSDK
 
 # S3
-echo "https://fra1.digitaloceanspaces.com" | sudo tee /run/secrets/S3_ENDPOINT
+echo "fra1.digitaloceanspaces.com" | sudo tee /run/secrets/S3_ENDPOINT
 echo "fra1" | sudo tee /run/secrets/S3_REGION
 echo "DO00J2BEN93Y8P6LBEYR" | sudo tee /run/secrets/S3_ACCESS_KEY_ID
 echo "n7zzLc5yZcnXA9f/v+vIVnP3pjxkE6NDNi4CEEnTM+E" | sudo tee /run/secrets/S3_SECRET_KEY
