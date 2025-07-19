@@ -44,20 +44,17 @@ services:
       - sh
       - -c
       - |
-        redis-server /redis.conf --requirepass "$$(cat /run/secrets/REDIS_PASSWORD)"
+        redis-server /redis.conf
     ports:
       - "6379:6379"
     networks:
       - local_network_bridge
     secrets:
-      - REDIS_PASSWORD
       - ca.pem
       - redis-server-cert.pem
       - redis-server-key.pem
       - fastapi-client-cert.pem
       - fastapi-client-key.pem
-    environment:
-      - REDIS_PASSWORD=/run/secrets/REDIS_PASSWORD
     volumes:
       - ./configurations/redis/redis.conf:/redis.conf:ro
       - ./volumes/redis_storage:/data
@@ -96,8 +93,6 @@ secrets:
   fastapi-client-key.pem:
     file: ./certs/fastapi-client-key.pem
 
-  REDIS_PASSWORD:
-    file: ./certs/REDIS_PASSWORD
   redis-server-cert.pem:
     file: ./certs/redis-server-cert.pem
   redis-server-key.pem:
