@@ -1,36 +1,40 @@
 from random import randint
-from typing import Optional, Annotated
+from typing import Annotated, Optional
 from uuid import UUID
 
+from apps.users_app.models import FollowModel, UserModel
+from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
+                                    ProfileSchema, ProfileSearchSchema,
+                                    ProfileTokenSchema,
+                                    ProfileUpdateMediaSchema,
+                                    ProfileUpdateSchema, RegisterSchema,
+                                    RegistrationTokenSchema,
+                                    RequestForgotPasswordSchema,
+                                    ResetPasswordSchema, ResultSchema,
+                                    TokenSchema, UserSearchResponseSchema,
+                                    VerifySchema)
+from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
+                                  notify_settings_stats, send_email_task)
 from bcrypt import checkpw, gensalt, hashpw
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from firebase_admin.auth import UserRecord
-from sqlalchemy import select, exists
-
-from apps.users_app.models import UserModel, FollowModel
-from apps.users_app.schemas import (
-    ForgotPasswordTokenSchema,
-    LoginSchema,
-    ProfileSchema,
-    RegisterSchema,
-    RegistrationTokenSchema,
-    RequestForgotPasswordSchema,
-    ResetPasswordSchema,
-    ResultSchema,
-    TokenSchema,
-    VerifySchema, UserSearchResponseSchema, ProfileSearchSchema, ProfileUpdateSchema, ProfileUpdateMediaSchema, ProfileTokenSchema,
-)
-from apps.users_app.tasks import add_follow_to_db, delete_follow_from_db, notify_settings_stats, send_email_task
 from services.firebase_service import validate_firebase_token
 from settings.my_database import DBSession
-from settings.my_dependency import create_jwt_token, headerTokenDependency, strictJwtDependency, jwtDependency
-from settings.my_exceptions import AlreadyExistException, HeaderTokenException, NotFoundException, ValidationException
-from settings.my_minio import put_object_to_minio, remove_objects_from_minio, wipe_objects_from_minio
+from settings.my_dependency import (create_jwt_token, headerTokenDependency,
+                                    jwtDependency, strictJwtDependency)
+from settings.my_exceptions import (AlreadyExistException,
+                                    HeaderTokenException, NotFoundException,
+                                    ValidationException)
+from settings.my_minio import (put_object_to_minio, remove_objects_from_minio,
+                               wipe_objects_from_minio)
 from settings.my_redis import cache_manager
+from sqlalchemy import exists, select
 from utility.my_enums import FollowStatus
 from utility.my_logger import my_logger
-from utility.utility import generate_avatar_url, generate_password_string, generate_unique_username
-from utility.validators import allowed_image_extension, get_file_extension, get_image_dimensions
+from utility.utility import (generate_avatar_url, generate_password_string,
+                             generate_unique_username)
+from utility.validators import (allowed_image_extension, get_file_extension,
+                                get_image_dimensions)
 
 users_router = APIRouter()
 
@@ -74,8 +78,12 @@ async def verify_route(htd: headerTokenDependency, schema: VerifySchema, session
     if schema.code != cache.get("code"):
         raise ValidationException(detail="Your verification code is incorrect.")
 
-    user = UserModel(name=cache.get("name"), username=cache.get("username"), email=cache.get("email"),
-                     password=hashpw(password=cache.get("password", "").encode(), salt=gensalt(rounds=8)).decode())
+    user = UserModel(
+        name=cache.get("name"),
+        username=cache.get("username"),
+        email=cache.get("email"),
+        password=hashpw(password=cache.get("password", "").encode(), salt=gensalt(rounds=8)).decode(),
+    )
     session.add(instance=user)
     await session.commit()
     await session.refresh(instance=user)
@@ -211,8 +219,9 @@ async def get_profile_route(jwt: strictJwtDependency, session: DBSession, target
     user: Optional[UserModel] = await session.get(UserModel, user_id)
     is_following: Optional[bool] = None
     if target_user_id is not None:
-        exists_stmt = select(FollowModel.id).where(FollowModel.follower_id == jwt.user_id, FollowModel.following_id == target_user_id,
-                                                   FollowModel.follow_status == FollowStatus.accepted)
+        exists_stmt = select(FollowModel.id).where(
+            FollowModel.follower_id == jwt.user_id, FollowModel.following_id == target_user_id, FollowModel.follow_status == FollowStatus.accepted
+        )
         is_following = await session.scalar(select(exists(exists_stmt)))
 
     if not user:
@@ -228,7 +237,7 @@ async def update_profile_route(jwt: strictJwtDependency, session: DBSession, sch
         if not user:
             raise NotFoundException("User not found.")
 
-        ''' Remove Avatar & Banner image'''
+        """ Remove Avatar & Banner image"""
         if schema.remove_avatar:
             if user.avatar_url is not None:
                 await remove_objects_from_minio(object_names=[user.avatar_url])
@@ -242,7 +251,7 @@ async def update_profile_route(jwt: strictJwtDependency, session: DBSession, sch
             await cache_manager.update_profile(user_id=user.id.hex, key="banner_url", value=None)
             my_logger.info("banner removed successfully")
 
-        ''' Field updating '''
+        """ Field updating """
         profile_schema = ProfileSchema.model_validate(obj=user)
 
         profile_dict = profile_schema.model_dump()
@@ -282,14 +291,15 @@ async def update_profile_route(jwt: strictJwtDependency, session: DBSession, sch
 
 
 @users_router.patch(path="/profile/update/media", response_model=ProfileUpdateMediaSchema, status_code=200)
-async def update_profile_route(jwt: strictJwtDependency, session: DBSession, avatar_file: Annotated[Optional[UploadFile], File()] = None,
-                               banner_file: Annotated[Optional[UploadFile], File()] = None):
+async def update_profile_route(
+    jwt: strictJwtDependency, session: DBSession, avatar_file: Annotated[Optional[UploadFile], File()] = None, banner_file: Annotated[Optional[UploadFile], File()] = None
+):
     try:
         user: Optional[UserModel] = await session.get(UserModel, jwt.user_id)
         if not user:
             raise NotFoundException("User not found.")
 
-        ''' Set Avatar & Banner image'''
+        """ Set Avatar & Banner image"""
         if avatar_file is not None:
             avatar_file_extension = get_file_extension(file=avatar_file)
             if avatar_file_extension not in allowed_image_extension:

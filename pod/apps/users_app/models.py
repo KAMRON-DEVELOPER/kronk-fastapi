@@ -2,15 +2,18 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func, select, text
 from sqlalchemy import TIMESTAMP
 from sqlalchemy import UUID as PG_UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, column_property, mapped_column, relationship
-
+from sqlalchemy import (DateTime, Enum, ForeignKey, String, UniqueConstraint,
+                        func, select, text)
+from sqlalchemy.orm import (DeclarativeBase, Mapped, column_property,
+                            mapped_column, relationship)
 from utility.my_enums import FollowPolicy, FollowStatus, UserRole, UserStatus
 
 if TYPE_CHECKING:
-    from ..chats_app.models import ChatMessageModel, ChatModel, ChatParticipantModel, GroupMessageModel, GroupModel, GroupParticipantModel
+    from ..chats_app.models import (ChatMessageModel, ChatModel,
+                                    ChatParticipantModel, GroupMessageModel,
+                                    GroupModel, GroupParticipantModel)
     from ..feeds_app.models import EngagementModel, FeedModel, ReportModel
 
 

@@ -4,7 +4,6 @@ from typing import Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 from utility.my_logger import my_logger
 
 
@@ -13,18 +12,20 @@ class Settings(BaseSettings):
     TEMP_IMAGES_FOLDER_PATH: Path = BASE_DIR / "static/images"
     TEMP_VIDEOS_FOLDER_PATH: Path = BASE_DIR / "static/videos"
 
-    DEBUG: int = 1
+    # SSL/TLS PROD
+    CA: Optional[str] = None
+    FASTAPI_CLIENT_CERT: Optional[str] = None
+    FASTAPI_CLIENT_KEY: Optional[str] = None
+
+    # SSL/TLS DEV
+    CA_PATH: Path = BASE_DIR / "certs/ca.pem"
+    FASTAPI_CLIENT_CERT_PATH: Path = BASE_DIR / "certs/fastapi-client-cert.pem"
+    FASTAPI_CLIENT_KEY_PATH: Path = BASE_DIR / "certs/fastapi-client-key.pem"
 
     # DATABASE
     DATABASE_URL: str = ""
 
-    # REDIS & TASKIQ
-    CA: Optional[str] = None
-    FASTAPI_CLIENT_CERT: Optional[str] = None
-    FASTAPI_CLIENT_KEY: Optional[str] = None
-    CA_PATH: Path = BASE_DIR / "certs/ca.pem"
-    FASTAPI_CLIENT_CERT_PATH: Path = BASE_DIR / "certs/fastapi-client-cert.pem"
-    FASTAPI_CLIENT_KEY_PATH: Path = BASE_DIR / "certs/fastapi-client-key.pem"
+    # REDIS
     REDIS_HOST: str = ""
 
     # FIREBASE ADMIN SDK

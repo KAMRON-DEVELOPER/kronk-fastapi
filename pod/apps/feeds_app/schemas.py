@@ -3,8 +3,7 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
-
-from utility.my_enums import FeedVisibility, CommentPolicy
+from utility.my_enums import CommentPolicy, FeedVisibility
 
 
 class AuthorSchema(BaseModel):

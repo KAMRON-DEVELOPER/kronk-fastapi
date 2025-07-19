@@ -1,10 +1,12 @@
 import json
 import math
 import time
-from datetime import date, datetime, timedelta, timezone, UTC
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any, Optional
-from uuid import uuid4, UUID
+from uuid import UUID, uuid4
 
+from apps.chats_app.schemas import (ChatMessageSchema, ChatResponseSchema,
+                                    ChatSchema, ParticipantSchema)
 from coredis import PureToken
 from coredis import Redis as SearchRedis
 from coredis.exceptions import ResponseError
@@ -12,8 +14,6 @@ from coredis.modules.response.types import SearchResult
 from coredis.modules.search import Field
 from redis.asyncio import Redis as CacheRedis
 from redis.asyncio.client import PubSub
-
-from apps.chats_app.schemas import ChatSchema, ParticipantSchema, ChatResponseSchema, ChatMessageSchema
 from settings.my_config import get_settings
 from utility.my_enums import EngagementType
 from utility.my_logger import my_logger
@@ -32,7 +32,7 @@ my_cache_redis: CacheRedis = CacheRedis(
     ssl_certfile=str(settings.FASTAPI_CLIENT_CERT_PATH),
     ssl_keyfile=str(settings.FASTAPI_CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
-    ssl_check_hostname=True
+    ssl_check_hostname=True,
 )
 my_search_redis: SearchRedis = SearchRedis(
     host=settings.REDIS_HOST,
@@ -165,8 +165,8 @@ class ChatCacheManager:
                 pipe.sismember("chats:online", pid)
             piped_results = await pipe.execute()
 
-        profiles: list[dict] = piped_results[:len(participant_ids)]
-        statuses: list[bool] = piped_results[len(participant_ids):]
+        profiles: list[dict] = piped_results[: len(participant_ids)]
+        statuses: list[bool] = piped_results[len(participant_ids) :]
 
         chat_list = []
         for chat_meta, last_msg, pid, profile, is_online in zip(chats, last_messages, participant_ids, profiles, statuses):
@@ -203,7 +203,7 @@ class ChatCacheManager:
     async def is_online(self, participant_id: str) -> bool:
         return bool(await self.cache_redis.sismember(name="chats:online", value=participant_id))
 
-    ''' ****************************************** EVENTS ****************************************** '''
+    """ ****************************************** EVENTS ****************************************** """
 
     async def add_user_to_chats(self, user_id: str) -> set[str]:
         async with self.cache_redis.pipeline() as pipe:
@@ -240,7 +240,7 @@ class CacheManager:
 
     USER_TIMELINE_KEY = "user:{user_id}:user_timeline"
 
-    ''' ****************************************** TIMELINE ****************************************** '''
+    """ ****************************************** TIMELINE ****************************************** """
 
     async def get_discover_timeline(self, user_id: Optional[str] = None, start: int = 0, end: int = 10) -> dict[str, list[dict] | int]:
         total_count: int = await self.cache_redis.zcard(name="global_timeline")
@@ -261,7 +261,7 @@ class CacheManager:
         return {"feeds": feeds, "end": total_count}
 
     async def get_user_timeline(self, user_id: str, engagement_type: EngagementType, start: int = 0, end: int = 10) -> dict[str, list[dict] | int]:
-        prefix: str = 'user_timeline' if engagement_type == EngagementType.feeds else engagement_type.value
+        prefix: str = "user_timeline" if engagement_type == EngagementType.feeds else engagement_type.value
 
         if engagement_type == EngagementType.feeds:
             total_count: int = await self.cache_redis.zcard(name=f"users:{user_id}:{prefix}")
@@ -275,13 +275,13 @@ class CacheManager:
             feed_ids = await self.cache_redis.zrevrange(name=f"users:{user_id}:{prefix}", start=start, end=end)
         else:
             all_feed_ids: set[str] = await self.cache_redis.smembers(name=f"users:{user_id}:{prefix}")
-            feed_ids = list(all_feed_ids)[start:end + 1]
+            feed_ids = list(all_feed_ids)[start : end + 1]
             # feed_ids = await self.cache_redis.lrange(name=f"users:{user_id}:{prefix}", start=start, end=end)
 
         feeds: list[dict] = await self._get_feeds(user_id=user_id, feed_ids=feed_ids)
         return {"feeds": feeds, "end": total_count}
 
-    ''' ********************************************* FEED ********************************************* '''
+    """ ********************************************* FEED ********************************************* """
 
     async def create_feed(self, mapping: dict, max_gt: int = 360, max_ft: int = 120, max_ut: int = 120):
         try:
@@ -382,10 +382,7 @@ class CacheManager:
                 suffixes = ["comments", "reposts", "quotes", "likes", "views", "bookmarks"]
 
                 # Get all users who interacted with this feed
-                engagement_map = {
-                    suffix: await self.cache_redis.smembers(f"feeds:{feed_id}:{suffix}")
-                    for suffix in suffixes
-                }
+                engagement_map = {suffix: await self.cache_redis.smembers(f"feeds:{feed_id}:{suffix}") for suffix in suffixes}
 
                 # Remove the feed ID from user:<user_id>:<suffix> sets
                 async with self.cache_redis.pipeline() as pipe:
@@ -470,11 +467,11 @@ class CacheManager:
             chunk_size = len(engagement_keys) + (len(interaction_keys) if has_interactions else 0)
             start = index * chunk_size
 
-            metrics = results[start:start + len(engagement_keys)]
+            metrics = results[start : start + len(engagement_keys)]
             engagement = {key: value for key, value in zip(engagement_keys, metrics) if value > 0}
 
             if has_interactions:
-                interactions: list[bool] = results[start + len(engagement_keys):start + chunk_size]
+                interactions: list[bool] = results[start + len(engagement_keys) : start + chunk_size]
                 engagement.update({interaction_key: True for interaction_key, interacted in zip(interaction_keys, interactions) if interacted})
 
             feed["engagement"] = engagement
@@ -495,7 +492,7 @@ class CacheManager:
 
         return feeds
 
-    ''' ***************************************** INTERACTION ***************************************** '''
+    """ ***************************************** INTERACTION ***************************************** """
 
     async def set_engagement(self, user_id: str, feed_id: str, engagement_type: EngagementType, is_comment: bool = False):
         engagement_key, user_key = _engagement_keys(feed_id=feed_id, user_id=user_id, engagement_type=engagement_type, is_comment=is_comment)
@@ -542,7 +539,7 @@ class CacheManager:
 
         return engagement
 
-    ''' ********************************************* USER ********************************************* '''
+    """ ********************************************* USER ********************************************* """
 
     async def create_profile(self, mapping: dict, user_id: Optional[str] = None, is_following: Optional[str] = None):
         try:
@@ -616,8 +613,9 @@ class CacheManager:
 
         async with my_cache_redis.pipeline() as pipe:
             # Remove user profile
-            pipe.delete(f"users:{user_id}:profile", f"users:{user_id}:user_timeline", f"user:{user_id}:following_timeline", f"users:{user_id}:followers",
-                        f"users:{user_id}:followings")
+            pipe.delete(
+                f"users:{user_id}:profile", f"users:{user_id}:user_timeline", f"user:{user_id}:following_timeline", f"users:{user_id}:followers", f"users:{user_id}:followings"
+            )
 
             # Remove follow relationships
             for follower_id in followers:
@@ -680,7 +678,7 @@ class CacheManager:
     async def is_following(self, user_id: str, follower_id: str) -> bool:
         return await self.cache_redis.sismember(name=f"users:{user_id}:followings", value=follower_id)
 
-    ''' ***************************** REGISTRATION & FORGOT PASSWORD MANAGEMENT ***************************** '''
+    """ ***************************** REGISTRATION & FORGOT PASSWORD MANAGEMENT ***************************** """
 
     async def set_registration_credentials(self, mapping: dict, expiry: int = 600) -> tuple[str, str]:
         verify_token = uuid4().hex
@@ -710,7 +708,7 @@ class CacheManager:
 
         # ****************************************************************** STATISTICS MANAGEMENT ******************************************************************
 
-    ''' ****************************************** SEARCH ****************************************** '''
+    """ ****************************************** SEARCH ****************************************** """
 
     async def is_username_or_email_taken(self, username: str, email: str) -> tuple[bool, bool]:
         username_query = escape_redisearch_special_chars(username)
@@ -763,7 +761,7 @@ class CacheManager:
         feeds = await self._get_feeds(user_id=user_id, feed_ids=feed_ids)
         return {"feeds": feeds, "end": results.total}
 
-    ''' ****************************************** HELPER FUNCTIONS ****************************************** '''
+    """ ****************************************** HELPER FUNCTIONS ****************************************** """
 
     async def get_comments_count(self, feed_id: str):
         return await self.cache_redis.scard(name=f"feeds:{feed_id}:comments")

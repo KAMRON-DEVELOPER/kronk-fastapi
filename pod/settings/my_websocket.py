@@ -2,13 +2,12 @@ import asyncio
 import json
 import time
 from asyncio import Task
-from typing import Optional, Callable, Awaitable
+from typing import Awaitable, Callable, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
-
 from settings.my_redis import my_cache_redis, pubsub_manager
 from utility.my_enums import ChatEvent
 from utility.my_logger import my_logger
@@ -88,13 +87,13 @@ class WebSocketManager:
 
 class WebSocketContextManager:
     def __init__(
-            self,
-            websocket: WebSocket,
-            connect_handler: Callable[[str, WebSocket], Awaitable[None]],
-            disconnect_handler: Callable[[str, WebSocket], Awaitable[None]],
-            pubsub_generator: Callable[[str], Awaitable[PubSub]],
-            message_handlers: dict[ChatEvent, Callable[[str, dict], Awaitable[None]]],
-            user_id: Optional[str] = None,
+        self,
+        websocket: WebSocket,
+        connect_handler: Callable[[str, WebSocket], Awaitable[None]],
+        disconnect_handler: Callable[[str, WebSocket], Awaitable[None]],
+        pubsub_generator: Callable[[str], Awaitable[PubSub]],
+        message_handlers: dict[ChatEvent, Callable[[str, dict], Awaitable[None]]],
+        user_id: Optional[str] = None,
     ):
         self.websocket = websocket
         self.user_id = user_id

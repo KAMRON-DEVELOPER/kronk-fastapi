@@ -3,11 +3,14 @@ from typing import Annotated, Optional
 from uuid import UUID
 
 from authlib.jose import JWTClaims, jwt
-from authlib.jose.errors import BadSignatureError, DecodeError, ExpiredTokenError, InvalidTokenError, KeyMismatchError
+from authlib.jose.errors import (BadSignatureError, DecodeError,
+                                 ExpiredTokenError, InvalidTokenError,
+                                 KeyMismatchError)
 from fastapi import Depends, Header, WebSocket, WebSocketException, status
-
 from settings.my_config import get_settings
-from settings.my_exceptions import ApiException, JWTDecodeException, JWTExpiredException, JWTSignatureException, UnauthorizedException
+from settings.my_exceptions import (ApiException, JWTDecodeException,
+                                    JWTExpiredException, JWTSignatureException,
+                                    UnauthorizedException)
 
 settings = get_settings()
 
@@ -31,9 +34,9 @@ class WebsocketCredential:
 
 
 def header_tokens_resolver(
-        verify_token: Optional[str] = Header(default=None),
-        forgot_password_token: Optional[str] = Header(default=None),
-        firebase_id_token: Optional[str] = Header(default=None),
+    verify_token: Optional[str] = Header(default=None),
+    forgot_password_token: Optional[str] = Header(default=None),
+    firebase_id_token: Optional[str] = Header(default=None),
 ):
     return HeaderTokensCredential(verify_token=verify_token, forgot_password_token=forgot_password_token, firebase_id_token=firebase_id_token)
 

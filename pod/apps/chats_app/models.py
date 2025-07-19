@@ -2,11 +2,11 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import ARRAY, TIMESTAMP, Enum, ForeignKey, String, Text, UniqueConstraint, func, select, text
+from apps.users_app.models import BaseModel, UserModel
+from sqlalchemy import (ARRAY, TIMESTAMP, Enum, ForeignKey, String, Text,
+                        UniqueConstraint, func, select, text)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
-
-from apps.users_app.models import BaseModel, UserModel
 from utility.my_enums import GroupType, MemberType
 
 

@@ -1,11 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import TIMESTAMP, UUID, Enum, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from apps.users_app.models import BaseModel, UserModel
-from utility.my_enums import EngagementType, FeedVisibility, ReportReason, CommentPolicy
+from sqlalchemy import (TIMESTAMP, UUID, Enum, ForeignKey, String,
+                        UniqueConstraint)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from utility.my_enums import (CommentPolicy, EngagementType, FeedVisibility,
+                              ReportReason)
 
 
 class CategoryModel(BaseModel):

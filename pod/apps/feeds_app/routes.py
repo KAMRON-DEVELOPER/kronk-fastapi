@@ -1,26 +1,31 @@
 import asyncio
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Optional
 from uuid import UUID
 
 import aiofiles
-from fastapi import APIRouter, Form, HTTPException, UploadFile, File
+from apps.feeds_app.models import (CategoryModel, EngagementType, FeedModel,
+                                   TagModel)
+from apps.feeds_app.schemas import (EngagementSchema, FeedResponseSchema,
+                                    FeedSchema)
+from apps.feeds_app.tasks import (notify_followers_task,
+                                  remove_engagement_task, set_engagement_task)
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from ffmpeg.asyncio import FFmpeg
-from sqlalchemy import Result, select
-from sqlalchemy.orm import selectinload
-
-from apps.feeds_app.models import EngagementType, FeedModel, TagModel, CategoryModel
-from apps.feeds_app.schemas import FeedSchema, FeedResponseSchema, EngagementSchema
-from apps.feeds_app.tasks import notify_followers_task, set_engagement_task, remove_engagement_task
 from settings.my_config import get_settings
 from settings.my_database import DBSession
-from settings.my_dependency import strictJwtDependency, jwtDependency
+from settings.my_dependency import jwtDependency, strictJwtDependency
 from settings.my_exceptions import NotFoundException, ValidationException
-from settings.my_minio import put_file_to_minio, put_object_to_minio, remove_objects_from_minio
+from settings.my_minio import (put_file_to_minio, put_object_to_minio,
+                               remove_objects_from_minio)
 from settings.my_redis import cache_manager
+from sqlalchemy import Result, select
+from sqlalchemy.orm import selectinload
 from utility.my_enums import CommentPolicy, FeedVisibility
 from utility.my_logger import my_logger
-from utility.validators import allowed_image_extension, allowed_video_extension, get_file_extension, get_video_duration_using_ffprobe
+from utility.validators import (allowed_image_extension,
+                                allowed_video_extension, get_file_extension,
+                                get_video_duration_using_ffprobe)
 
 feed_router = APIRouter()
 
@@ -28,17 +33,20 @@ settings = get_settings()
 
 
 @feed_router.post(path="/create", response_model=FeedSchema, response_model_exclude_defaults=True, response_model_exclude_none=True, status_code=201)
-async def create_feed_route(jwt: strictJwtDependency, session: DBSession,
-                            body: Annotated[Optional[str], Form()] = None,
-                            scheduled_at: Annotated[Optional[datetime], Form()] = None,
-                            feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
-                            comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
-                            quote_id: Annotated[Optional[UUID], Form()] = None,
-                            parent_id: Annotated[Optional[UUID], Form()] = None,
-                            category_id: Annotated[Optional[UUID], Form()] = None,
-                            tags: Annotated[Optional[list[UUID]], Form()] = None,
-                            video_file: Annotated[Optional[UploadFile], File()] = None,
-                            image_file: Annotated[Optional[UploadFile], File()] = None):
+async def create_feed_route(
+    jwt: strictJwtDependency,
+    session: DBSession,
+    body: Annotated[Optional[str], Form()] = None,
+    scheduled_at: Annotated[Optional[datetime], Form()] = None,
+    feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
+    comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
+    quote_id: Annotated[Optional[UUID], Form()] = None,
+    parent_id: Annotated[Optional[UUID], Form()] = None,
+    category_id: Annotated[Optional[UUID], Form()] = None,
+    tags: Annotated[Optional[list[UUID]], Form()] = None,
+    video_file: Annotated[Optional[UploadFile], File()] = None,
+    image_file: Annotated[Optional[UploadFile], File()] = None,
+):
     try:
         if not body.strip():
             raise ValidationException(detail="body must be provided.")
@@ -110,18 +118,21 @@ async def create_feed_route(jwt: strictJwtDependency, session: DBSession,
 
 
 @feed_router.patch(path="/update", response_model=FeedSchema, status_code=200)
-async def update_feed_route(jwt: strictJwtDependency, session: DBSession,
-                            feed_id: UUID,
-                            body: Annotated[Optional[str], Form()] = None,
-                            scheduled_at: Annotated[Optional[datetime], Form()] = None,
-                            feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
-                            comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
-                            tags: Annotated[Optional[list[UUID]], Form()] = None,
-                            category_id: Annotated[Optional[UUID], Form()] = None,
-                            video_file: Annotated[Optional[UploadFile], File()] = None,
-                            image_file: Annotated[Optional[UploadFile], File()] = None,
-                            remove_video: Annotated[Optional[str], Form()] = None,
-                            remove_image: Annotated[Optional[str], Form()] = None):
+async def update_feed_route(
+    jwt: strictJwtDependency,
+    session: DBSession,
+    feed_id: UUID,
+    body: Annotated[Optional[str], Form()] = None,
+    scheduled_at: Annotated[Optional[datetime], Form()] = None,
+    feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
+    comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
+    tags: Annotated[Optional[list[UUID]], Form()] = None,
+    category_id: Annotated[Optional[UUID], Form()] = None,
+    video_file: Annotated[Optional[UploadFile], File()] = None,
+    image_file: Annotated[Optional[UploadFile], File()] = None,
+    remove_video: Annotated[Optional[str], Form()] = None,
+    remove_image: Annotated[Optional[str], Form()] = None,
+):
     try:
         my_logger.debug(f"body: {body}")
         my_logger.debug(f"video_file.filename: {video_file.filename if video_file is not None else None}")

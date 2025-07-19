@@ -1,18 +1,21 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter
-from sqlalchemy import select, exists, func
-from sqlalchemy.orm import selectinload
-
-from apps.chats_app.models import ChatModel, ChatMessageModel, ChatParticipantModel
-from apps.chats_app.schemas import ChatResponseSchema, CreateMessageSchema, ChatSchema, ParticipantSchema, ChatMessageResponseSchema, ChatMessageSchema
+from apps.chats_app.models import (ChatMessageModel, ChatModel,
+                                   ChatParticipantModel)
+from apps.chats_app.schemas import (ChatMessageResponseSchema,
+                                    ChatMessageSchema, ChatResponseSchema,
+                                    ChatSchema, CreateMessageSchema,
+                                    ParticipantSchema)
 from apps.users_app.schemas import ResultSchema
+from fastapi import APIRouter
 from settings.my_database import DBSession
 from settings.my_dependency import strictJwtDependency
 from settings.my_exceptions import ApiException
-from settings.my_redis import chat_cache_manager, cache_manager, pubsub_manager
+from settings.my_redis import cache_manager, chat_cache_manager, pubsub_manager
+from sqlalchemy import exists, func, select
+from sqlalchemy.orm import selectinload
 from utility.my_logger import my_logger
 
 chats_router = APIRouter()
@@ -53,7 +56,7 @@ async def create_chat_route(jwt: strictJwtDependency, session: DBSession, schema
         mapping = {
             "id": chat_id.hex,
             "last_activity_at": now_timestamp,
-            "last_message": {"id": message_id.hex, "chat_id": chat_id.hex, "sender_id": jwt.user_id.hex, "message": schema.message, "created_at": now_timestamp}
+            "last_message": {"id": message_id.hex, "chat_id": chat_id.hex, "sender_id": jwt.user_id.hex, "message": schema.message, "created_at": now_timestamp},
         }
         await chat_cache_manager.create_chat(user_id=jwt.user_id.hex, participant_id=participant_id.hex, chat_id=chat_id.hex, mapping=mapping)
 
@@ -67,10 +70,10 @@ async def create_chat_route(jwt: strictJwtDependency, session: DBSession, schema
                 username=participant_profile.get("username"),
                 avatar_url=participant_profile.get("avatar_url"),
                 last_seen_at=datetime.fromtimestamp(int(participant_profile.get("last_seen_at"))) if "last_seen_at" in participant_profile else None,
-                is_online=is_online
+                is_online=is_online,
             ),
             last_activity_at=now,
-            last_message=ChatMessageSchema(id=message_id, chat_id=chat_id, sender_id=jwt.user_id, message=schema.message, created_at=now)
+            last_message=ChatMessageSchema(id=message_id, chat_id=chat_id, sender_id=jwt.user_id, message=schema.message, created_at=now),
         )
 
         if is_online:
@@ -85,7 +88,7 @@ async def create_chat_route(jwt: strictJwtDependency, session: DBSession, schema
                     "avatar_url": participant_profile.get("avatar_url"),
                     "last_seen_at": now_timestamp,
                     "is_online": True,
-                }
+                },
             }
             await pubsub_manager.publish(topic=f"chats:home:{participant_id.hex}", data=data)
 
@@ -143,7 +146,7 @@ async def get_chat_messages_route(_: strictJwtDependency, session: DBSession, ch
 
         my_logger.warning("3")
 
-        stmt = (select(ChatMessageModel).where(ChatMessageModel.chat_id == chat_id).order_by(ChatMessageModel.created_at.desc()).offset(start).limit(end - start))
+        stmt = select(ChatMessageModel).where(ChatMessageModel.chat_id == chat_id).order_by(ChatMessageModel.created_at.desc()).offset(start).limit(end - start)
         result = await session.scalars(stmt)
         messages: list[ChatMessageModel] = result.all()
         my_logger.warning("4")
