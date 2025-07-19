@@ -19,4 +19,4 @@ service/volumes/minio_storage
 certs/kronk-production-firebase-adminsdk.json
 
 # Ignore everything in certs (optional)
-# certs/
+ certs/

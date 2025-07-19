@@ -47,26 +47,26 @@ async def app_lifespan(_app: FastAPI):
         await initialize_redis_indexes()
         my_logger.warning("✅ redis ready")
     except Exception as e:
-        my_logger.exception("❌ Redis init failed", exc_info=e)
+        my_logger.exception(f"❌ Redis init failed, e: {e}")
 
     try:
         my_logger.warning("🧪 init db...")
         await initialize_db()
         my_logger.warning("✅ db ready")
     except Exception as e:
-        my_logger.exception("❌ DB init failed", exc_info=e)
+        my_logger.exception(f"❌ DB init failed, e: {e}")
 
     try:
         my_logger.warning("🧪 init firebase...")
         initialize_firebase()
         my_logger.warning("✅ firebase ready")
     except Exception as e:
-        my_logger.exception("❌ Firebase init failed", exc_info=e)
+        my_logger.exception(f"❌ Firebase init failed, e: {e}")
 
     try:
         instrumentator.expose(_app)
     except Exception as e:
-        my_logger.exception("❌ Prometheus expose failed", exc_info=e)
+        my_logger.exception(f"❌ Prometheus expose failed, e: {e}")
 
     try:
         if not broker.is_worker_process:
@@ -74,7 +74,7 @@ async def app_lifespan(_app: FastAPI):
             await broker.startup()
             my_logger.warning("✅ Broker ready")
     except Exception as e:
-        my_logger.exception("❌ Broker startup failed", exc_info=e)
+        my_logger.exception(f"❌ Broker startup failed, e: {e}")
 
     yield
 
@@ -84,7 +84,7 @@ async def app_lifespan(_app: FastAPI):
             await broker.shutdown()
             my_logger.warning("✅ Broker shutdown complete")
     except Exception as e:
-        my_logger.exception("❌ Broker shutdown failed", exc_info=e)
+        my_logger.exception(f"❌ Broker shutdown failed, e: {e}")
 
 
 app: FastAPI = FastAPI(lifespan=app_lifespan)
