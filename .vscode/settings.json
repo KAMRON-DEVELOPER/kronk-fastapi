@@ -24,5 +24,8 @@
     "**/volumes",
     "**/redis_storage",
     "**/postgres_storage"
-  ]
+  ],
+  "files.associations": {
+    "Dockerfile.*": "dockerfile"
+  }
 }
