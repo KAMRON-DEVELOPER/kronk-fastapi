@@ -40,11 +40,12 @@ services:
     image: redis/redis-stack-server:latest
     container_name: redis_container
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - |
-        redis-server /redis.conf
+    # command:
+    #   - sh
+    #   - -c
+    #   - |
+    #     redis-server /redis-stack.conf
+    command: ["redis-server", "/redis-stack.conf"]
     ports:
       - "6379:6379"
     networks:
@@ -56,7 +57,7 @@ services:
       - fastapi-client-cert.pem
       - fastapi-client-key.pem
     volumes:
-      - ./configurations/redis/redis.conf:/redis.conf:ro
+      - ./configurations/redis-stack/redis-stack.conf:/redis-stack.conf:ro
       - ./volumes/redis_storage:/data
     healthcheck:
       test:
