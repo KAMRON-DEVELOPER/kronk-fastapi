@@ -4,10 +4,11 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator
-
 from settings.my_exceptions import ValidationException
 from utility.my_enums import FollowPolicy, UserRole, UserStatus
-from utility.validators import validate_email, validate_length, validate_password, validate_username, violent_words_regex
+from utility.validators import (validate_email, validate_length,
+                                validate_password, validate_username,
+                                violent_words_regex)
 
 
 class RegisterSchema(BaseModel):

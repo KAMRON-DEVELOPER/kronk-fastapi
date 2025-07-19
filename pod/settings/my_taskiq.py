@@ -1,8 +1,8 @@
+from settings.my_config import get_settings
 from taskiq import TaskiqScheduler
 from taskiq.schedule_sources import LabelScheduleSource
-from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend, RedisScheduleSource
-
-from settings.my_config import get_settings
+from taskiq_redis import (ListQueueBroker, RedisAsyncResultBackend,
+                          RedisScheduleSource)
 
 settings = get_settings()
 

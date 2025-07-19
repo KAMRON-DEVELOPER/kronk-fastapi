@@ -1,13 +1,6 @@
 from contextlib import asynccontextmanager
 
 import taskiq_fastapi
-from fastapi import FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.templating import Jinja2Templates
-from prometheus_fastapi_instrumentator import Instrumentator
-from starlette.staticfiles import StaticFiles
-
 from apps.admin_app.routes import admin_router
 from apps.admin_app.ws import admin_ws_router
 from apps.chats_app.routes import chats_router
@@ -15,12 +8,18 @@ from apps.chats_app.ws import chat_ws_router
 from apps.feeds_app.routes import feed_router
 from apps.feeds_app.ws import feed_ws_router
 from apps.users_app.routes import users_router
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from prometheus_fastapi_instrumentator import Instrumentator
 from services.firebase_service import initialize_firebase
 from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
 from settings.my_redis import initialize_redis_indexes
 from settings.my_taskiq import broker
+from starlette.staticfiles import StaticFiles
 from utility.my_logger import my_logger
 
 settings = get_settings()
@@ -90,9 +89,9 @@ async def root() -> dict:
     return {"status": "ok"}
 
 
-@app.get('/favicon.ico', include_in_schema=False)
+@app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    return FileResponse('static/favicon.ico')
+    return FileResponse("static/favicon.ico")
 
 
 @app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)

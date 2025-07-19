@@ -1,4 +1,4 @@
-from typing import Callable, Awaitable, Dict
+from typing import Awaitable, Callable, Dict
 
 from utility.my_logger import my_logger
 
@@ -32,5 +32,4 @@ async def handle_goes_online(payload: dict):
 
 
 @event_dispatcher.on("message")
-async def handle_message(payload: dict):
-    ...
+async def handle_message(payload: dict): ...

@@ -2,10 +2,9 @@ import asyncio
 
 from fastapi import APIRouter, WebSocket
 from redis.asyncio.client import PubSub
-
 from settings.my_dependency import websocketDependency
-from settings.my_redis import pubsub_manager, chat_cache_manager
-from settings.my_websocket import chat_ws_manager, WebSocketContextManager
+from settings.my_redis import chat_cache_manager, pubsub_manager
+from settings.my_websocket import WebSocketContextManager, chat_ws_manager
 from utility.my_enums import ChatEvent
 from utility.my_logger import my_logger
 
@@ -28,9 +27,14 @@ async def enter_home(websocket_dependency: websocketDependency):
         ChatEvent.created_chat: handle_created_chat,
     }
 
-    async with WebSocketContextManager(websocket=websocket, user_id=user_id, connect_handler=chat_connect, disconnect_handler=chat_disconnect,
-                                       pubsub_generator=chat_pubsub_generator,
-                                       message_handlers=message_handlers) as connection:
+    async with WebSocketContextManager(
+        websocket=websocket,
+        user_id=user_id,
+        connect_handler=chat_connect,
+        disconnect_handler=chat_disconnect,
+        pubsub_generator=chat_pubsub_generator,
+        message_handlers=message_handlers,
+    ) as connection:
         await connection.wait_until_disconnected()
 
 

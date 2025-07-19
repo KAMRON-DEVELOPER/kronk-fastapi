@@ -7,7 +7,6 @@ from miniopy_async.api import Minio
 from miniopy_async.datatypes import Object
 # from miniopy_async.datatypes import ListObjects, Object
 from miniopy_async.helpers import ObjectWriteResult
-
 from settings.my_config import get_settings
 from utility.my_logger import my_logger
 
@@ -48,8 +47,9 @@ async def put_object_to_minio(object_name: str, data: bytes, content_type: str, 
             await minio_client.remove_object(bucket_name=settings.S3_BUCKET_NAME, object_name=old_object_name)
 
         _data = BytesIO(data)  # noqa
-        result: ObjectWriteResult = await minio_client.put_object(bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, data=_data, length=len(data),
-                                                                  content_type=content_type)
+        result: ObjectWriteResult = await minio_client.put_object(
+            bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, data=_data, length=len(data), content_type=content_type
+        )
 
         return result.object_name
     except Exception as e:
@@ -62,8 +62,9 @@ async def put_file_to_minio(object_name: str, file_path: Path, content_type: str
         if for_update and old_object_name:
             await minio_client.remove_object(bucket_name=settings.S3_BUCKET_NAME, object_name=old_object_name)
 
-        result: ObjectWriteResult = await minio_client.fput_object(bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, file_path=str(file_path),
-                                                                   content_type=content_type)
+        result: ObjectWriteResult = await minio_client.fput_object(
+            bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, file_path=str(file_path), content_type=content_type
+        )
 
         return result.object_name
     except Exception as e:

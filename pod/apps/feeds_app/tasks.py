@@ -2,16 +2,15 @@ import asyncio
 from typing import Annotated, Optional
 from uuid import UUID
 
+from apps.feeds_app.models import EngagementModel
 from redis.asyncio import Redis
-from sqlalchemy import select, and_
+from settings.my_database import get_session
+from settings.my_redis import cache_manager, my_cache_redis, pubsub_manager
+from settings.my_taskiq import broker
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqDepends
-
-from apps.feeds_app.models import EngagementModel
-from settings.my_database import get_session
-from settings.my_redis import cache_manager, pubsub_manager, my_cache_redis
-from settings.my_taskiq import broker
-from utility.my_enums import PubSubTopics, EngagementType
+from utility.my_enums import EngagementType, PubSubTopics
 from utility.my_logger import my_logger
 
 
@@ -30,7 +29,7 @@ async def notify_followers_task(user_id: str):
 
     async def notify(follower_id: str):
         topic = PubSubTopics.FEEDS.value.format(follower_id=follower_id)
-        await pubsub_manager.publish(topic=topic, data={"user_id": user_id, "avatar_url": avatar_url if avatar_url else 'defaults/default-avatar.jpg', "event": "new_feed"})
+        await pubsub_manager.publish(topic=topic, data={"user_id": user_id, "avatar_url": avatar_url if avatar_url else "defaults/default-avatar.jpg", "event": "new_feed"})
 
     tasks = [notify(follower_id) for follower_id in online_followers]
     await asyncio.gather(*tasks)
@@ -65,7 +64,8 @@ async def remove_engagement_task(user_id: str, feed_id: str, engagement_type: En
         if engagement_type == EngagementType.quotes:
             return
         stmt = select(EngagementModel).where(
-            and_(EngagementModel.user_id == UUID(hex=user_id), EngagementModel.feed_id == UUID(hex=feed_id), EngagementModel.engagement_type == engagement_type))
+            and_(EngagementModel.user_id == UUID(hex=user_id), EngagementModel.feed_id == UUID(hex=feed_id), EngagementModel.engagement_type == engagement_type)
+        )
         result = await session.execute(stmt)
         engagement: Optional[EngagementModel] = result.scalar_one_or_none()
         await session.delete(instance=engagement)
