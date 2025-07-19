@@ -1,4 +1,5 @@
 import asyncio
+import ssl
 from typing import Annotated, AsyncGenerator
 
 from fastapi import Depends
@@ -12,7 +13,12 @@ from utility.my_logger import my_logger
 
 settings = get_settings()
 
-async_engine: AsyncEngine = create_async_engine(settings.DATABASE_URL, echo=False, connect_args={"ssl": True})
+ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(settings.BASE_DIR / settings.CA_PATH))
+ssl_context.load_cert_chain(certfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_CERT_PATH), keyfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_KEY_PATH))
+ssl_context.check_hostname = True
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+async_engine: AsyncEngine = create_async_engine(settings.DATABASE_URL, echo=False, connect_args={"ssl": ssl_context})
 async_session = async_sessionmaker(async_engine, expire_on_commit=False, class_=AsyncSession)
 
 

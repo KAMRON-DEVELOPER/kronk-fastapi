@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:bookworm
+    container_name: postgres_container
+    restart: unless-stopped
+    entrypoint: /postgres-entrypoint.sh
+    ports:
+      - "5432:5432"
+    networks:
+      - local_network_bridge
+    secrets:
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - ca.pem
+      - pg-server-cert.pem
+      - pg-server-key.pem
+      - fastapi-client-cert.pem
+      - fastapi-client-key.pem
+    environment:
+      - POSTGRES_DB_FILE=/run/secrets/POSTGRES_DB
+      - POSTGRES_USER_FILE=/run/secrets/POSTGRES_USER
+      - POSTGRES_PASSWORD_FILE=/run/secrets/POSTGRES_PASSWORD
+      # Additional security environment variables
+      - POSTGRES_INITDB_ARGS=--auth-host=cert --auth-local=peer
+    volumes:
+      - ./postgres-entrypoint.sh:/postgres-entrypoint.sh
+      - ./configurations/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./configurations/postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./volumes/postgres_storage:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'PGPASSWORD="$$(cat /run/secrets/POSTGRES_PASSWORD)" pg_isready -U "$$(cat /run/secrets/POSTGRES_USER)" -d "$$(cat /run/secrets/POSTGRES_DB)"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: redis_container
+    restart: unless-stopped
+    # command:
+    #   - sh
+    #   - -c
+    #   - |
+    #     redis-server /redis-stack.conf
+    command:
+      [
+        "redis-server",
+        "/redis-stack.conf",
+      ]
+    ports:
+      - "6379:6379"
+    networks:
+      - local_network_bridge
+    secrets:
+      - ca.pem
+      - redis-server-cert.pem
+      - redis-server-key.pem
+      - fastapi-client-cert.pem
+      - fastapi-client-key.pem
+    volumes:
+      - ./configurations/redis-stack/redis-stack.conf:/redis-stack.conf:ro
+      - ./volumes/redis_storage:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli --tls --cacert /run/secrets/ca.pem --cert /run/secrets/fastapi-client-cert.pem --key /run/secrets/fastapi-client-key.pem  -a "$$(cat /run/secrets/REDIS_PASSWORD)" ping | grep PONG',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_storage:
+    name: postgres_storage_volume
+  redis_storage:
+    name: redis_storage_volume
+
+secrets:
+  POSTGRES_DB:
+    file: ./certs/POSTGRES_DB
+  POSTGRES_USER:
+    file: ./certs/POSTGRES_USER
+  POSTGRES_PASSWORD:
+    file: ./certs/POSTGRES_PASSWORD
+
+  ca.pem:
+    file: ./certs/ca.pem
+  pg-server-cert.pem:
+    file: ./certs/pg-server-cert.pem
+  pg-server-key.pem:
+    file: ./certs/pg-server-key.pem
+  fastapi-client-cert.pem:
+    file: ./certs/fastapi-client-cert.pem
+  fastapi-client-key.pem:
+    file: ./certs/fastapi-client-key.pem
+
+  redis-server-cert.pem:
+    file: ./certs/redis-server-cert.pem
+  redis-server-key.pem:
+    file: ./certs/redis-server-key.pem
+
+networks:
+  local_network_bridge:
+    external: true

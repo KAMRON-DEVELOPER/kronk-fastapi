@@ -20,13 +20,12 @@ class Settings(BaseSettings):
 
     # REDIS & TASKIQ
     CA: str = ""
-    CA_PATH: Optional[FilePath] = None
+    CA_PATH: str = "certs/ca/ca.pem"
     FASTAPI_CLIENT_CERT: str = ""
-    FASTAPI_CLIENT_CERT_PATH: Optional[FilePath] = None
+    FASTAPI_CLIENT_CERT_PATH: str = "certs/fastapi/fastapi-client-cert.pem"
     FASTAPI_CLIENT_KEY: str = ""
-    FASTAPI_CLIENT_KEY_PATH: Optional[FilePath] = None
+    FASTAPI_CLIENT_KEY_PATH: str = "certs/fastapi/fastapi-client-key.pem"
     REDIS_HOST: str = ""
-    REDIS_PASSWORD: str = ""
 
     # FIREBASE ADMIN SDK
     FIREBASE_ADMINSDK: str = ""
@@ -56,13 +55,13 @@ class Settings(BaseSettings):
             self.FIREBASE_ADMINSDK_PATH = secret_base / "FIREBASE_ADMINSDK"
 
         if not self.CA_PATH and (secret_base / "CA").exists():
-            self.CA_PATH = secret_base / "CA"
+            self.CA_PATH = str(secret_base / "CA")
 
         if not self.FASTAPI_CLIENT_CERT_PATH and (secret_base / "FASTAPI_CLIENT_CERT").exists():
-            self.FASTAPI_CLIENT_CERT_PATH = secret_base / "FASTAPI_CLIENT_CERT"
+            self.FASTAPI_CLIENT_CERT_PATH = str(secret_base / "FASTAPI_CLIENT_CERT")
 
         if not self.FASTAPI_CLIENT_KEY_PATH and (secret_base / "FASTAPI_CLIENT_KEY").exists():
-            self.FASTAPI_CLIENT_KEY_PATH = secret_base / "FASTAPI_CLIENT_KEY"
+            self.FASTAPI_CLIENT_KEY_PATH = str(secret_base / "FASTAPI_CLIENT_KEY")
 
         return self
 
@@ -75,26 +74,19 @@ def get_settings():
 
     my_logger.warning("🔧 get_settings(): Loaded configuration values...\n")
 
-    ca_path = s.BASE_DIR / "certs/ca/ca.pem"
-    my_logger.warning(f"ca_path exist: {ca_path.exists()}")
-    my_logger.warning(f"ca_path: {ca_path}")
-    my_logger.warning(f"str(ca_path): {str(ca_path)}\n")
-
     # General
     my_logger.warning(f"BASE_DIR: {s.BASE_DIR}")
     my_logger.warning(f"TEMP_IMAGES_FOLDER_PATH: {s.TEMP_IMAGES_FOLDER_PATH}")
     my_logger.warning(f"TEMP_VIDEOS_FOLDER_PATH: {s.TEMP_VIDEOS_FOLDER_PATH}")
-    my_logger.warning(f"DEBUG: {s.DEBUG}\n")
 
     # DATABASE
     my_logger.warning(f"DATABASE_URL: {s.DATABASE_URL}\n")
 
     # REDIS & TASKIQ
-    my_logger.warning(f"CA_PATH: {s.CA_PATH}")
-    my_logger.warning(f"FASTAPI_CLIENT_CERT_PATH: {s.FASTAPI_CLIENT_CERT_PATH}")
-    my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {s.FASTAPI_CLIENT_KEY_PATH}")
+    my_logger.warning(f"CA_PATH: {str(s.BASE_DIR / s.CA_PATH)}")
+    my_logger.warning(f"FASTAPI_CLIENT_CERT_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_CERT_PATH)}")
+    my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_KEY_PATH)}\n")
     my_logger.warning(f"REDIS_HOST: {s.REDIS_HOST}")
-    my_logger.warning(f"REDIS_PASSWORD: {s.REDIS_PASSWORD[:3]}{'*' * (len(s.REDIS_PASSWORD) - 3) if s.REDIS_PASSWORD else ''}\n")
 
     # FIREBASE
     my_logger.warning(f"FIREBASE_ADMINSDK_PATH: {s.FIREBASE_ADMINSDK_PATH}\n")

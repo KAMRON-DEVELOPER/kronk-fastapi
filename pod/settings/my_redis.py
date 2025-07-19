@@ -24,34 +24,26 @@ settings = get_settings()
 
 my_cache_redis: CacheRedis = CacheRedis(
     host=settings.REDIS_HOST,
-    password=settings.REDIS_PASSWORD,
     db=0,
     decode_responses=True,
     auto_close_connection_pool=True,
     ssl=True,
-    # ssl_ca_certs=settings.CA_PATH,
-    # ssl_certfile=settings.FASTAPI_CLIENT_CERT_PATH,
-    # ssl_keyfile=settings.FASTAPI_CLIENT_KEY_PATH,
-    ssl_ca_certs=str(settings.BASE_DIR / "certs/ca/ca.pem"),
-    ssl_certfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-cert.pem"),
-    ssl_keyfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-key.pem"),
+    ssl_ca_certs=str(settings.BASE_DIR / settings.CA_PATH),
+    ssl_certfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_CERT_PATH),
+    ssl_keyfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
-    # ssl_check_hostname=True
+    ssl_check_hostname=True
 )
 my_search_redis: SearchRedis = SearchRedis(
     host=settings.REDIS_HOST,
-    password=settings.REDIS_PASSWORD,
     db=0,
     decode_responses=True,
     ssl=True,
-    # ssl_ca_certs=settings.CA_PATH,
-    # ssl_certfile=settings.FASTAPI_CLIENT_CERT_PATH,
-    # ssl_keyfile=settings.FASTAPI_CLIENT_KEY_PATH,
-    ssl_ca_certs=str(settings.BASE_DIR / "certs/ca/ca.pem"),
-    ssl_certfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-cert.pem"),
-    ssl_keyfile=str(settings.BASE_DIR / "certs/fastapi/fastapi-client-key.pem"),
+    ssl_ca_certs=str(settings.BASE_DIR / settings.CA_PATH),
+    ssl_certfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_CERT_PATH),
+    ssl_keyfile=str(settings.BASE_DIR / settings.FASTAPI_CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
-    # ssl_check_hostname=True,
+    ssl_check_hostname=True,
 )
 
 USER_INDEX_NAME = "idx:users"
@@ -60,11 +52,13 @@ feed_INDEX_NAME = "idx:feeds"
 
 async def redis_ready() -> bool:
     try:
-        await my_cache_redis.ping()
-        await my_search_redis.ping()
+        my_cache_redis_ping_result = await my_cache_redis.ping()
+        my_search_redis_ping_result = await my_search_redis.ping()
+        my_logger.exception(f"my_cache_redis_ping_result: {my_cache_redis_ping_result}")
+        my_logger.exception(f"my_search_redis_ping_result: {my_search_redis_ping_result}")
         return True
     except Exception as e:
-        print(f"🌋 Failed in redis_om_ready: {e}")
+        my_logger.exception(f"redis_ready: {e}")
         return False
 
 

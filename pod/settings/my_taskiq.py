@@ -7,7 +7,7 @@ from settings.my_config import get_settings
 settings = get_settings()
 
 broker = ListQueueBroker(
-    url=f"rediss://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:6379",
+    url=f"rediss://@{settings.REDIS_HOST}:6379",
     ssl=True,
     ssl_ca_certs=settings.CA_PATH,
     ssl_certfile=settings.FASTAPI_CLIENT_CERT_PATH,
@@ -15,7 +15,7 @@ broker = ListQueueBroker(
     ssl_cert_reqs="required",
     ssl_check_hostname=True
 ).with_result_backend(result_backend=RedisAsyncResultBackend(
-    redis_url=f"rediss://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:6379",
+    redis_url=f"rediss://@{settings.REDIS_HOST}:6379",
     result_ex_time=600,
     ssl=True,
     ssl_ca_certs=settings.CA_PATH,
@@ -27,7 +27,7 @@ broker = ListQueueBroker(
 )
 
 redis_schedule_source = RedisScheduleSource(
-    url=f"rediss://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:6379",
+    url=f"rediss://@{settings.REDIS_HOST}:6379",
     ssl=True,
     ssl_ca_certs=settings.CA_PATH,
     ssl_certfile=settings.FASTAPI_CLIENT_CERT_PATH,
