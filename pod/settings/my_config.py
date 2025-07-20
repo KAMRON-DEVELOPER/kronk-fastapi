@@ -4,6 +4,7 @@ from typing import Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from utility.my_logger import my_logger
 
 
@@ -50,18 +51,27 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def inject_secret_file_paths(self):
-        # If the value is the content (Docker secret), infer the path
+        my_logger.info("inject_secret_file_paths is working...")
+
         secret_base = Path("/run/secrets")
+
+        my_logger.info("inject_secret_file_paths is working...")
+        my_logger.info(f"secret_base exists: {secret_base.exists()}")
+        my_logger.info(f"FIREBASE_ADMINSDK exists: {(secret_base / 'FIREBASE_ADMINSDK').exists()}")
+        my_logger.info(f"CA exists: {(secret_base / 'CA').exists()}")
+        my_logger.info(f"FASTAPI_CLIENT_CERT exists: {(secret_base / 'FASTAPI_CLIENT_CERT').exists()}")
+        my_logger.info(f"FASTAPI_CLIENT_KEY exists: {(secret_base / 'FASTAPI_CLIENT_KEY').exists()}")
+
         if not self.FIREBASE_ADMINSDK_PATH and (secret_base / "FIREBASE_ADMINSDK").exists():
             self.FIREBASE_ADMINSDK_PATH = secret_base / "FIREBASE_ADMINSDK"
 
-        if not self.CA_PATH and (secret_base / "CA").exists():
+        if self.CA:
             self.CA_PATH = secret_base / "CA"
 
-        if not self.FASTAPI_CLIENT_CERT_PATH and (secret_base / "FASTAPI_CLIENT_CERT").exists():
+        if self.FASTAPI_CLIENT_CERT:
             self.FASTAPI_CLIENT_CERT_PATH = secret_base / "FASTAPI_CLIENT_CERT"
 
-        if not self.FASTAPI_CLIENT_KEY_PATH and (secret_base / "FASTAPI_CLIENT_KEY").exists():
+        if self.FASTAPI_CLIENT_KEY:
             self.FASTAPI_CLIENT_KEY_PATH = secret_base / "FASTAPI_CLIENT_KEY"
 
         return self
@@ -74,6 +84,15 @@ def get_settings():
     s = Settings()
 
     my_logger.warning("🔧 get_settings(): Loaded configuration values...\n")
+
+    secret_base = Path("/run/secrets")
+
+    my_logger.info("inject_secret_file_paths is working...")
+    my_logger.info(f"secret_base exists: {secret_base.exists()}")
+    my_logger.info(f"FIREBASE_ADMINSDK exists: {(secret_base / 'FIREBASE_ADMINSDK').exists()}")
+    my_logger.info(f"CA exists: {(secret_base / 'CA').exists()}")
+    my_logger.info(f"FASTAPI_CLIENT_CERT exists: {(secret_base / 'FASTAPI_CLIENT_CERT').exists()}")
+    my_logger.info(f"FASTAPI_CLIENT_KEY exists: {(secret_base / 'FASTAPI_CLIENT_KEY').exists()}")
 
     # General
     my_logger.warning(f"BASE_DIR: {s.BASE_DIR}")

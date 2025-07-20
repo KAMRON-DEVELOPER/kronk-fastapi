@@ -275,12 +275,17 @@ echo "f94b638b565c503932b657534d1f044b7f1c8acfb76170e80851704423a49186" | docker
 
 # EMAIL
 echo "wSsVR61z+0b3Bq9+mzWtJOc+yAxSUgv1HEx93Qaoun79Sv7KosduxECdBw/1HPBLGDNpQWAU9bN/yx0C0GUN2dh8mVAGDSiF9mqRe1U4J3x17qnvhDzIWWtYlxGNLIkLzwlumWdiEssi+g==" | docker secret create EMAIL_SERVICE_API_KEY -
+
+# MONITORING
+echo "$(htpasswd -nbB kamronbek kamronbek2003)" | docker secret create MONITORING_CREDENTIALS -
+echo "kamronbek" | docker secret create GF_SECURITY_ADMIN_USER -
+echo "kamronbek2003" | docker secret create GF_SECURITY_ADMIN_PASSWORD -
 ```
 
 ### 🐳 On VPS with Redis & PostgreSQL (Prod Swarm Node)
 
 ```bash
-network create -d bridge local_network_bridge
+docker network create -d bridge local_network_bridge
 
 mkdir -p volumes/redis_storage
 mkdir -p volumes/postgres_storage
@@ -325,10 +330,10 @@ chmod 600 cluster/swarm/traefik/config/acme.json
 ```bash
 docker context use dev-kronk
 
-docker stack deploy -c cluster/swarm/traefik/traefik.yml traefik-stack
-docker stack deploy -c cluster/swarm/backend/backend_stack.yml backend-stack
-docker stack deploy -c cluster/swarm/monitoring/portainer.yml monitoring-stack
-docker stack deploy -c cluster/swarm/monitoring/grafana.yml monitoring-stack
+docker stack deploy -c cluster/swarm/traefik/docker-compose.traefik.yml traefik
+docker stack deploy -c cluster/swarm/backend/docker-compose.backend.yml backend
+docker stack deploy -c cluster/swarm/monitoring/docker-compose.grafana.yml grafana
+docker stack deploy -c cluster/swarm/monitoring/docker-compose.prometheus.yml prometheus
 ```
 
 ---
