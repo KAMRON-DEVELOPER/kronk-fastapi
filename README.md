@@ -60,16 +60,6 @@ openssl req -new -key docker-client-key.pem -out docker-client.csr -subj "/CN=pr
 echo "extendedKeyUsage = clientAuth" > docker-client-ext.cnf
 openssl x509 -req -in docker-client.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out docker-client-cert.pem -days 3650 -sha256 -extfile docker-client-ext.cnf
 
-# Create Docker secrets
-cd ~/certs/docker
-docker secret create docker_ca.pem ../ca/ca.pem
-docker secret create docker_server_cert.pem docker-server-cert.pem
-docker secret create docker_server_key.pem docker-server-key.pem
-docker secret create docker_client_cert.pem docker-client-cert.pem
-docker secret create docker_client_key.pem docker-client-key.pem
-
-
-
 
 # **************** 3. 🔐 Redis and PostgreSQL TLS (for FastAPI) ****************
 
@@ -118,13 +108,36 @@ openssl x509 -req -in fastapi-client.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pe
 ### Copy apropriate files like this
 
 ```bash
+### 1. Move certificates to Docker's directory (accessible by root)
 sudo mkdir -p /etc/docker/certs
 sudo cp ~/certs/docker/docker-server-cert.pem /etc/docker/certs/
 sudo cp ~/certs/docker/docker-server-key.pem /etc/docker/certs/
 sudo cp ~/certs/ca/ca.pem /etc/docker/certs/
 ```
 
-### Update `/etc/docker/daemon.json`
+### 2. Set proper permissions
+
+```bash
+sudo chmod 600 /etc/docker/certs/*.pem
+sudo chown root:root /etc/docker/certs/*.pem
+```
+
+### 3. Create `/etc/docker/daemon.json` configuration
+
+```bash
+sudo tee /etc/docker/daemon.json <<EOF
+{
+  "tls": true,
+  "tlsverify": true,
+  "tlscacert": "/etc/docker/certs/ca.pem",
+  "tlscert": "/etc/docker/certs/docker-server-cert.pem",
+  "tlskey": "/etc/docker/certs/docker-server-key.pem",
+  "hosts": ["fd://", "tcp://127.0.0.1:2376"]
+}
+EOF
+```
+
+#### or
 
 ```json
 {
@@ -140,9 +153,21 @@ sudo cp ~/certs/ca/ca.pem /etc/docker/certs/
 }
 ```
 
-### Restart Docker
+### 4. Fix systemd conflict (critical!)
 
 ```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/override.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/bin/dockerd --containerd=/run/containerd/containerd.sock
+EOF
+```
+
+### 5. Reload and restart
+
+```bash
+sudo systemctl daemon-reload
 sudo systemctl restart docker
 ```
 
@@ -222,29 +247,28 @@ echo "wSsVR61z+0b3Bq9+mzWtJOc+yAxSUgv1HEx93Qaoun79Sv7KosduxECdBw/1HPBLGDNpQWAU9b
 
 ```bash
 # for prometheus & fastapi
-docker secret create ca.pem certs/ca/ca.pem
-docker secret create docker_client_cert.pem certs/docker/docker-client-cert.pem
-docker secret create docker_client_key.pem certs/docker/docker-client-key.pem
-
-docker secret create fastapi_client_cert.pem certs/fastapi/fastapi-client-cert.pem
-docker secret create fastapi_client_key.pem certs/fastapi/fastapi-client-key.pem
+cd ~/certs/docker
+docker secret create ca.pem ~/certs/ca/ca.pem
+docker secret create docker-client-cert.pem ~/certs/docker/docker-client-cert.pem
+docker secret create docker-client-key.pem ~/certs/docker/docker-client-key.pem
+# docker secret create fastapi-client-cert.pem ~/certs/fastapi/fastapi-client-cert.pem
+# docker secret create fastapi-client-key.pem ~/certs/fastapi/fastapi-client-key.pem
 
 # POSTGRES
-echo "postgresql+asyncpg://kamronbek:kamronbek2003@postgres.kronk.uz:5432/kronk_db?ssl=verify-full&sslrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | docker secret create DATABASE_URL -
+echo "postgresql+asyncpg://kamronbek:kamronbek2003@postgres.kronk.uz:5432/kronk_db" | docker secret create DATABASE_URL -
 
 # REDIS
-echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
 echo "redis.kronk.uz" | docker secret create REDIS_HOST -
 
-# Firebase
-docker secret create FIREBASE_ADMINSDK firebase-adminsdk.json
+# FIREBASE
+docker secret create FIREBASE_ADMINSDK ~/certs/kronk-production-firebase-adminsdk.json
 
 # S3 -
-echo "https://fra1.digitaloceanspaces.com" | docker secret create S3_ENDPOINT -
+echo "fra1.digitaloceanspaces.com" | docker secret create S3_ENDPOINT -
 echo "fra1" | docker secret create S3_REGION -
 echo "DO00J2BEN93Y8P6LBEYR" | docker secret create S3_ACCESS_KEY_ID -
 echo "n7zzLc5yZcnXA9f/v+vIVnP3pjxkE6NDNi4CEEnTM+E" | docker secret create S3_SECRET_KEY -
-echo "kronk-bucket" | docker secret create S3_BUCKET_NAME -
+echo "kronk-digitalocean-bucket" | docker secret create S3_BUCKET_NAME -
 
 # FASTAPI-JWT
 echo "f94b638b565c503932b657534d1f044b7f1c8acfb76170e80851704423a49186" | docker secret create SECRET_KEY -
@@ -256,30 +280,12 @@ echo "wSsVR61z+0b3Bq9+mzWtJOc+yAxSUgv1HEx93Qaoun79Sv7KosduxECdBw/1HPBLGDNpQWAU9b
 ### 🐳 On VPS with Redis & PostgreSQL (Prod Swarm Node)
 
 ```bash
-# for redis & postgres
-docker secret create ca.pem certs/ca/ca.pem
-docker secret create redis_server_cert.pem certs/redis/redis-server-prod-cert.pem
-docker secret create redis_server_key.pem certs/redis/redis-server-key.pem
-docker secret create pg_server_cert.pem certs/postgres/pg-server-prod-cert.pem
-docker secret create pg_server_key.pem certs/postgres/pg-server-key.pem
-
-# POSTGRES
-echo "kronk_db" | docker secret create POSTGRES_DB -
-echo "kamronbek" | docker secret create POSTGRES_USER -
-echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
-
-# REDIS
-echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
-echo "localhost" | docker secret create REDIS_HOST -
-
-docker network create --driver overlay --attachable redis_default
-docker network create --driver overlay --attachable postgres_default
+network create -d bridge local_network_bridge
 
 mkdir -p volumes/redis_storage
 mkdir -p volumes/postgres_storage
 
-docker stack deploy -c docker-compose.redis.yml redis -d
-docker stack deploy -c docker-compose.postgres.yml postgres -d
+docker compose up -d
 ```
 
 ---
@@ -299,7 +305,7 @@ docker swarm join --token <TOKEN> <MANAGER_NODE_PUBLIC_IP>:2377
 ## 6. 🌐 Create Overlay Network
 
 ```bash
-docker network create --driver=overlay --attachable traefik-public
+docker network create --driver=overlay --attachable traefik-network
 ```
 
 ---
