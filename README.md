@@ -251,8 +251,8 @@ cd ~/certs/docker
 docker secret create ca.pem ~/certs/ca/ca.pem
 docker secret create docker-client-cert.pem ~/certs/docker/docker-client-cert.pem
 docker secret create docker-client-key.pem ~/certs/docker/docker-client-key.pem
-docker secret create fastapi-client-cert.pem ~/certs/fastapi/fastapi-client-cert.pem
-docker secret create fastapi-client-key.pem ~/certs/fastapi/fastapi-client-key.pem
+# docker secret create fastapi-client-cert.pem ~/certs/fastapi/fastapi-client-cert.pem
+# docker secret create fastapi-client-key.pem ~/certs/fastapi/fastapi-client-key.pem
 
 # POSTGRES
 echo "postgresql+asyncpg://kamronbek:kamronbek2003@postgres.kronk.uz:5432/kronk_db" | docker secret create DATABASE_URL -
