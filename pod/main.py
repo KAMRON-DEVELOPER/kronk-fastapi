@@ -1,25 +1,25 @@
 from contextlib import asynccontextmanager
 
 import taskiq_fastapi
-from apps.admin_app.routes import admin_router
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from prometheus_fastapi_instrumentator import Instrumentator
+from starlette.staticfiles import StaticFiles
+
 from apps.admin_app.ws import admin_ws_router
 from apps.chats_app.routes import chats_router
 from apps.chats_app.ws import chat_ws_router
 from apps.feeds_app.routes import feed_router
 from apps.feeds_app.ws import feed_ws_router
 from apps.users_app.routes import users_router
-from fastapi import FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from prometheus_fastapi_instrumentator import Instrumentator
 from services.firebase_service import initialize_firebase
 from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
 from settings.my_redis import initialize_redis_indexes
 from settings.my_taskiq import broker
-from starlette.staticfiles import StaticFiles
 from utility.my_logger import my_logger
 
 settings = get_settings()
@@ -30,23 +30,17 @@ async def app_lifespan(_app: FastAPI):
     my_logger.warning("🚀 Starting app_lifespan...")
 
     try:
-        my_logger.warning("🧪 init redis...")
         await initialize_redis_indexes()
-        my_logger.warning("✅ redis ready")
     except Exception as e:
         my_logger.exception(f"❌ Redis init failed, e: {e}")
 
     try:
-        my_logger.warning("🧪 init db...")
         await initialize_db()
-        my_logger.warning("✅ db ready")
     except Exception as e:
         my_logger.exception(f"❌ DB init failed, e: {e}")
 
     try:
-        my_logger.warning("🧪 init firebase...")
         initialize_firebase()
-        my_logger.warning("✅ firebase ready")
     except Exception as e:
         my_logger.exception(f"❌ Firebase init failed, e: {e}")
 
@@ -57,9 +51,7 @@ async def app_lifespan(_app: FastAPI):
 
     try:
         if not broker.is_worker_process:
-            my_logger.warning("🔄 Starting broker...")
             await broker.startup()
-            my_logger.warning("✅ Broker ready")
     except Exception as e:
         my_logger.exception(f"❌ Broker startup failed, e: {e}")
 
@@ -67,9 +59,7 @@ async def app_lifespan(_app: FastAPI):
 
     try:
         if not broker.is_worker_process:
-            my_logger.warning("🔻 Shutting down broker...")
             await broker.shutdown()
-            my_logger.warning("✅ Broker shutdown complete")
     except Exception as e:
         my_logger.exception(f"❌ Broker shutdown failed, e: {e}")
 
@@ -108,7 +98,6 @@ async def terms_of_service(request: Request):
 app.include_router(router=users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(router=feed_router, prefix="/api/v1/feeds", tags=["feeds"])
 app.include_router(router=chats_router, prefix="/api/v1/chats", tags=["chats"])
-app.include_router(router=admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 # Websocket Routes
 app.include_router(router=admin_ws_router, prefix="/api/v1/admin", tags=["admin ws"])

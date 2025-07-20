@@ -5,8 +5,6 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from apps.chats_app.schemas import (ChatMessageSchema, ChatResponseSchema,
-                                    ChatSchema, ParticipantSchema)
 from coredis import PureToken
 from coredis import Redis as SearchRedis
 from coredis.exceptions import ResponseError
@@ -14,6 +12,9 @@ from coredis.modules.response.types import SearchResult
 from coredis.modules.search import Field
 from redis.asyncio import Redis as CacheRedis
 from redis.asyncio.client import PubSub
+
+from apps.chats_app.schemas import (ChatMessageSchema, ChatResponseSchema,
+                                    ChatSchema, ParticipantSchema)
 from settings.my_config import get_settings
 from utility.my_enums import EngagementType
 from utility.my_logger import my_logger
@@ -54,8 +55,8 @@ async def redis_ready() -> bool:
     try:
         my_cache_redis_ping_result = await my_cache_redis.ping()
         my_search_redis_ping_result = await my_search_redis.ping()
-        my_logger.exception(f"my_cache_redis_ping_result: {my_cache_redis_ping_result}")
-        my_logger.exception(f"my_search_redis_ping_result: {my_search_redis_ping_result}")
+        my_logger.debug(f"my_cache_redis_ping_result: {my_cache_redis_ping_result}")
+        my_logger.debug(f"my_search_redis_ping_result: {my_search_redis_ping_result}")
         return True
     except Exception as e:
         my_logger.exception(f"redis_ready: {e}")
@@ -64,10 +65,6 @@ async def redis_ready() -> bool:
 
 async def initialize_redis_indexes() -> None:
     try:
-        my_logger.warning(f"redis_ready() starting...")
-        ready = await redis_ready()
-        my_logger.warning(f"redis_ready() done, ready? {ready}")
-
         my_logger.debug(f"creating index...")
         await my_search_redis.search.create(
             index=USER_INDEX_NAME, on=PureToken.HASH, schema=[Field("email", PureToken.TEXT), Field("username", PureToken.TEXT)], prefixes=["users:"]
@@ -166,7 +163,7 @@ class ChatCacheManager:
             piped_results = await pipe.execute()
 
         profiles: list[dict] = piped_results[: len(participant_ids)]
-        statuses: list[bool] = piped_results[len(participant_ids) :]
+        statuses: list[bool] = piped_results[len(participant_ids):]
 
         chat_list = []
         for chat_meta, last_msg, pid, profile, is_online in zip(chats, last_messages, participant_ids, profiles, statuses):
@@ -275,7 +272,7 @@ class CacheManager:
             feed_ids = await self.cache_redis.zrevrange(name=f"users:{user_id}:{prefix}", start=start, end=end)
         else:
             all_feed_ids: set[str] = await self.cache_redis.smembers(name=f"users:{user_id}:{prefix}")
-            feed_ids = list(all_feed_ids)[start : end + 1]
+            feed_ids = list(all_feed_ids)[start: end + 1]
             # feed_ids = await self.cache_redis.lrange(name=f"users:{user_id}:{prefix}", start=start, end=end)
 
         feeds: list[dict] = await self._get_feeds(user_id=user_id, feed_ids=feed_ids)
@@ -467,11 +464,11 @@ class CacheManager:
             chunk_size = len(engagement_keys) + (len(interaction_keys) if has_interactions else 0)
             start = index * chunk_size
 
-            metrics = results[start : start + len(engagement_keys)]
+            metrics = results[start: start + len(engagement_keys)]
             engagement = {key: value for key, value in zip(engagement_keys, metrics) if value > 0}
 
             if has_interactions:
-                interactions: list[bool] = results[start + len(engagement_keys) : start + chunk_size]
+                interactions: list[bool] = results[start + len(engagement_keys): start + chunk_size]
                 engagement.update({interaction_key: True for interaction_key, interacted in zip(interaction_keys, interactions) if interacted})
 
             feed["engagement"] = engagement
