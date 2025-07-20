@@ -10,7 +10,11 @@ services:
       - "--providers.swarm.network=traefik-network" # This option can be overridden on a per-container basis with the 'traefik.docker.network'
       # - "--traefik.swarm.lbswarm=true" # If you enable this option, Traefik will use the virtual IP provided by docker swarm instead of the containers IPs
       # - "--providers.swarm.constraints=Label(`a.label.name`,`foo`)" $ If none of the container labels match the expression, no route for that container is created.
-      # - "--providers.swarm.tls=false/true"
+      - "--providers.swarm.tls=true"
+      - "--providers.swarm.tls.ca=/run/secrets/ca.pem"
+      - "--providers.swarm.tls.cert=/run/secrets/fastapi-client-cert.pem"
+      - "--providers.swarm.tls.key=/run/secrets/fastapi-client-key.pem"
+      - "--providers.swarm.tls.insecureSkipVerify=false"
       - "--providers.swarm.exposedbydefault=false"
       - "--entrypoints.http.address=:80"
       - "--entrypoints.https.address=:443"
