@@ -2,12 +2,13 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import TIMESTAMP
-from sqlalchemy import UUID as PG_UUID
 from sqlalchemy import (DateTime, Enum, ForeignKey, String, UniqueConstraint,
                         func, select, text)
+from sqlalchemy import TIMESTAMP
+from sqlalchemy import UUID as PG_UUID
 from sqlalchemy.orm import (DeclarativeBase, Mapped, column_property,
                             mapped_column, relationship)
+
 from utility.my_enums import FollowPolicy, FollowStatus, UserRole, UserStatus
 
 if TYPE_CHECKING:
@@ -49,11 +50,11 @@ class UserModel(BaseModel):
     email: Mapped[str] = mapped_column(String(length=50), index=True)
     phone_number: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
     password: Mapped[str] = mapped_column(String(length=120))
-    avatar_url: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
-    banner_url: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
-    banner_color: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(length=255), nullable=True)
+    banner_url: Mapped[Optional[str]] = mapped_column(String(length=255), nullable=True)
+    banner_color: Mapped[Optional[str]] = mapped_column(String(length=255), nullable=True)
     birthdate: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    bio: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
+    bio: Mapped[Optional[str]] = mapped_column(String(length=255), nullable=True)
     country: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), default=UserRole.regular)
