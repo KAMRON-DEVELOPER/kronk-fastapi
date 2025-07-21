@@ -4,14 +4,17 @@ from typing import Annotated, Optional
 from uuid import UUID
 
 import aiofiles
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from ffmpeg.asyncio import FFmpeg
+from sqlalchemy import Result, select
+from sqlalchemy.orm import selectinload
+
 from apps.feeds_app.models import (CategoryModel, EngagementType, FeedModel,
                                    TagModel)
 from apps.feeds_app.schemas import (EngagementSchema, FeedResponseSchema,
                                     FeedSchema)
 from apps.feeds_app.tasks import (notify_followers_task,
                                   remove_engagement_task, set_engagement_task)
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from ffmpeg.asyncio import FFmpeg
 from settings.my_config import get_settings
 from settings.my_database import DBSession
 from settings.my_dependency import jwtDependency, strictJwtDependency
@@ -19,8 +22,6 @@ from settings.my_exceptions import NotFoundException, ValidationException
 from settings.my_minio import (put_file_to_minio, put_object_to_minio,
                                remove_objects_from_minio)
 from settings.my_redis import cache_manager
-from sqlalchemy import Result, select
-from sqlalchemy.orm import selectinload
 from utility.my_enums import CommentPolicy, FeedVisibility
 from utility.my_logger import my_logger
 from utility.validators import (allowed_image_extension,
@@ -34,18 +35,18 @@ settings = get_settings()
 
 @feed_router.post(path="/create", response_model=FeedSchema, response_model_exclude_defaults=True, response_model_exclude_none=True, status_code=201)
 async def create_feed_route(
-    jwt: strictJwtDependency,
-    session: DBSession,
-    body: Annotated[Optional[str], Form()] = None,
-    scheduled_at: Annotated[Optional[datetime], Form()] = None,
-    feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
-    comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
-    quote_id: Annotated[Optional[UUID], Form()] = None,
-    parent_id: Annotated[Optional[UUID], Form()] = None,
-    category_id: Annotated[Optional[UUID], Form()] = None,
-    tags: Annotated[Optional[list[UUID]], Form()] = None,
-    video_file: Annotated[Optional[UploadFile], File()] = None,
-    image_file: Annotated[Optional[UploadFile], File()] = None,
+        jwt: strictJwtDependency,
+        session: DBSession,
+        body: Annotated[Optional[str], Form()] = None,
+        scheduled_at: Annotated[Optional[datetime], Form()] = None,
+        feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
+        comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
+        quote_id: Annotated[Optional[UUID], Form()] = None,
+        parent_id: Annotated[Optional[UUID], Form()] = None,
+        category_id: Annotated[Optional[UUID], Form()] = None,
+        tags: Annotated[Optional[list[UUID]], Form()] = None,
+        video_file: Annotated[Optional[UploadFile], File()] = None,
+        image_file: Annotated[Optional[UploadFile], File()] = None,
 ):
     try:
         if not body.strip():
@@ -119,19 +120,19 @@ async def create_feed_route(
 
 @feed_router.patch(path="/update", response_model=FeedSchema, status_code=200)
 async def update_feed_route(
-    jwt: strictJwtDependency,
-    session: DBSession,
-    feed_id: UUID,
-    body: Annotated[Optional[str], Form()] = None,
-    scheduled_at: Annotated[Optional[datetime], Form()] = None,
-    feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
-    comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
-    tags: Annotated[Optional[list[UUID]], Form()] = None,
-    category_id: Annotated[Optional[UUID], Form()] = None,
-    video_file: Annotated[Optional[UploadFile], File()] = None,
-    image_file: Annotated[Optional[UploadFile], File()] = None,
-    remove_video: Annotated[Optional[str], Form()] = None,
-    remove_image: Annotated[Optional[str], Form()] = None,
+        jwt: strictJwtDependency,
+        session: DBSession,
+        feed_id: UUID,
+        body: Annotated[Optional[str], Form()] = None,
+        scheduled_at: Annotated[Optional[datetime], Form()] = None,
+        feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
+        comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
+        tags: Annotated[Optional[list[UUID]], Form()] = None,
+        category_id: Annotated[Optional[UUID], Form()] = None,
+        video_file: Annotated[Optional[UploadFile], File()] = None,
+        image_file: Annotated[Optional[UploadFile], File()] = None,
+        remove_video: Annotated[Optional[str], Form()] = None,
+        remove_image: Annotated[Optional[str], Form()] = None,
 ):
     try:
         my_logger.debug(f"body: {body}")
@@ -299,14 +300,6 @@ async def set_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_typ
     engagement = await cache_manager.set_engagement(user_id=jwt.user_id.hex, feed_id=feed_id.hex, engagement_type=engagement_type, is_comment=is_comment)
     await set_engagement_task.kiq(user_id=jwt.user_id.hex, feed_id=feed_id, engagement_type=engagement_type)
     my_logger.debug(f"engagement: {engagement}")
-
-    if engagement_type == EngagementType.reposts:
-        follower_ids = cache_manager.get_followers(user_id=jwt.user_id.hex)
-
-        async with cache_manager.cache_redis.pipeline() as pipe:
-            for fid in follower_ids:
-                pipe.hset(name=f"users:{fid}:following_timeline", value=feed_id.hex)
-
     return engagement
 
 

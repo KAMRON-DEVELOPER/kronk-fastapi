@@ -494,6 +494,13 @@ class CacheManager:
     async def set_engagement(self, user_id: str, feed_id: str, engagement_type: EngagementType, is_comment: bool = False):
         engagement_key, user_key = _engagement_keys(feed_id=feed_id, user_id=user_id, engagement_type=engagement_type, is_comment=is_comment)
 
+        # if engagement_type == EngagementType.reposts:
+        #     follower_ids = await cache_manager.get_followers(user_id=jwt.user_id.hex)
+        #
+        #     async with cache_manager.cache_redis.pipeline() as pipe:
+        #         for fid in follower_ids:
+        #             pipe.hset(name=f"users:{fid}:following_timeline", value=feed_id.hex)
+
         async with self.cache_redis.pipeline() as pipe:
             pipe.sadd(engagement_key, user_id)
             pipe.sadd(user_key, feed_id)
