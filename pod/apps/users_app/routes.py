@@ -317,7 +317,8 @@ async def update_profile_route(
             if len(avatar_bytes) > 2 * 1024 * 1024:
                 raise ValidationException(detail="Avatar image size exceeded limit 2MB.")
 
-            avatar_object_name = f"users/{jwt.user_id.hex}/avatar.{avatar_file_extension}"
+            # avatar_object_name = f"users/{jwt.user_id.hex}/avatar.{avatar_file_extension}"
+            avatar_object_name = f"users/{jwt.user_id.hex}/{avatar_file.filename}"
             avatar_url: str = await put_object_to_minio(object_name=avatar_object_name, data=avatar_bytes, content_type=avatar_file.content_type)
             user.avatar_url = avatar_url
             await cache_manager.update_profile(user_id=user.id.hex, key="avatar_url", value=avatar_url)
@@ -336,7 +337,8 @@ async def update_profile_route(
             if len(banner_bytes) > 2 * 1024 * 1024:
                 raise ValidationException(detail="Banner image size exceeded limit 2MB.")
 
-            banner_object_name = f"users/{jwt.user_id.hex}/banner.{banner_file_extension}"
+            # banner_object_name = f"users/{jwt.user_id.hex}/banner.{banner_file_extension}"
+            banner_object_name = f"users/{jwt.user_id.hex}/{banner_file.filename}"
             banner_url: str = await put_object_to_minio(object_name=banner_object_name, data=banner_bytes, content_type=banner_file.content_type)
             user.banner_url = banner_url
             await cache_manager.update_profile(user_id=user.id.hex, key="banner_url", value=banner_url)
