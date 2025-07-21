@@ -193,8 +193,10 @@ async def update_feed_route(
 
         if remove_image and feed.image_url:
             await remove_objects_from_minio([feed.image_url])
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="image_url", value=None)
         if remove_video and feed.video_url == remove_video:
             await remove_objects_from_minio([feed.video_url])
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="video_url", value=None)
 
         if image_file:
             my_logger.debug(f"image_file: {image_file}")
@@ -335,7 +337,7 @@ async def validate_and_save_image(user_id: str, image_file: UploadFile) -> str:
     if ext not in allowed_image_extension:
         raise ValidationException(detail="Only PNG, JPG, and JPEG formats are allowed for feed images")
     content = await image_file.read()
-    if len(content) > 4 * 1024 * 1024:
+    if len(content) > 12 * 1024 * 1024:
         raise ValidationException(detail="Feed image size exceeded limit 4MB.")
     return await put_object_to_minio(object_name=f"users/{user_id}/feed_images/{image_file.filename}", data=content, content_type=image_file.content_type)
 
