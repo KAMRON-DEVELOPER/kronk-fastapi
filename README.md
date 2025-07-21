@@ -316,10 +316,23 @@ chmod 600 cluster/swarm/traefik/config/acme.json
 ```bash
 docker context use dev-kronk
 
-docker stack deploy -c cluster/swarm/traefik/docker-compose.traefik.yml traefik
-docker stack deploy -c cluster/swarm/backend/docker-compose.fastapi.yml fastapi
-docker stack deploy -c cluster/swarm/monitoring/docker-compose.grafana.yml grafana
-docker stack deploy -c cluster/swarm/monitoring/docker-compose.prometheus.yml prometheus
+docker stack deploy -c cluster/swarm/traefik/docker-compose.traefik.yml traefik -d
+docker stack deploy -c cluster/swarm/prometheus/docker-compose.prometheus.yml prometheus -d
+docker stack deploy -c cluster/swarm/grafana/docker-compose.grafana.yml grafana -d
+docker stack deploy -c cluster/swarm/monitoring/docker-compose.cadvisor.yml cadvisor -d
+docker stack deploy -c cluster/swarm/monitoring/docker-compose.node_exporter.yml node_exporter -d
+docker stack deploy -c cluster/swarm/backend/docker-compose.fastapi.yml fastapi -d
+docker stack deploy -c cluster/swarm/backend/docker-compose.taskiq_scheduler.yml taskiq_scheduler -d
+docker stack deploy -c cluster/swarm/backend/docker-compose.taskiq_worker.yml taskiq_worker -d
+
+docker stack deploy -c traefik/docker-compose.traefik.yml traefik -d
+docker stack deploy -c prometheus/docker-compose.prometheus.yml prometheus -d
+docker stack deploy -c grafana/docker-compose.grafana.yml grafana -d
+docker stack deploy -c monitoring/docker-compose.cadvisor.yml cadvisor -d
+docker stack deploy -c monitoring/docker-compose.node_exporter.yml node_exporter -d
+docker stack deploy -c backend/docker-compose.fastapi.yml fastapi -d
+docker stack deploy -c backend/docker-compose.taskiq_scheduler.yml taskiq_scheduler -d
+docker stack deploy -c backend/docker-compose.taskiq_worker.yml taskiq_worker -d
 ```
 
 ---
