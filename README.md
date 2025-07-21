@@ -205,24 +205,10 @@ You can link or copy secrets manually:
 
 ```bash
 # POSTGRES
-echo "kronk_db" | docker secret create POSTGRES_DB -
-echo "kamronbek" | docker secret create POSTGRES_USER -
-echo "kamronbek2003" | docker secret create POSTGRES_PASSWORD -
-echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db?sslmode=verify-full&slrootcert=/run/secrets/ca.pem&sslcert=/run/secrets/fastapi_client_cert.crt&sslkey=/run/secrets/fastapi_client_key.pem" | sudo tee /run/secrets/DATABASE_URL
+echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db" | sudo tee /run/secrets/DATABASE_URL
 
-# REDIS for fastapi & uvicorn
-sudo cp certs/ca/ca.pem /run/secrets/ca.pem
-sudo cp certs/fastapi/fastapi-client-cert.pem /run/secrets/fastapi_client_cert.pem
-sudo cp certs/fastapi/fastapi-client-key.pem /run/secrets/fastapi_client_key.pem
-echo "kamronbek2003" | sudo tee /run/secrets/REDIS_PASSWORD
+# REDIS
 echo "localhost" | sudo tee /run/secrets/REDIS_HOST
-
-# REDIS for local compose
-echo "kamronbek2003" | docker secret create REDIS_PASSWORD -
-echo "localhost" | docker secret create REDIS_HOST -
-
-# Firebase
-sudo cp certs/kronk-production-firebase-adminsdk.json /run/secrets/FIREBASE_ADMINSDK
 
 # S3
 echo "fra1.digitaloceanspaces.com" | sudo tee /run/secrets/S3_ENDPOINT
@@ -331,7 +317,7 @@ chmod 600 cluster/swarm/traefik/config/acme.json
 docker context use dev-kronk
 
 docker stack deploy -c cluster/swarm/traefik/docker-compose.traefik.yml traefik
-docker stack deploy -c cluster/swarm/backend/docker-compose.backend.yml backend
+docker stack deploy -c cluster/swarm/backend/docker-compose.fastapi.yml fastapi
 docker stack deploy -c cluster/swarm/monitoring/docker-compose.grafana.yml grafana
 docker stack deploy -c cluster/swarm/monitoring/docker-compose.prometheus.yml prometheus
 ```

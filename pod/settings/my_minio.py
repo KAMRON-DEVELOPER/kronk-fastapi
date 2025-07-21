@@ -6,6 +6,7 @@ from typing import Optional
 import aiohttp
 from miniopy_async.api import Minio
 from miniopy_async.datatypes import Object
+from miniopy_async.error import MinioException, S3Error
 # from miniopy_async.datatypes import ListObjects, Object
 from miniopy_async.helpers import ObjectWriteResult
 
@@ -23,7 +24,7 @@ minio_client: Minio = Minio(
 )
 
 
-async def initialize_minio() -> bool:
+async def initialize_minio():
     try:
         # Ensure bucket exists
         if not await minio_client.bucket_exists(settings.S3_BUCKET_NAME):
@@ -34,23 +35,33 @@ async def initialize_minio() -> bool:
             my_logger.info(f"Bucket {settings.S3_BUCKET_NAME} exists.")
 
         # Check and apply policy
-        current_policy_str = await minio_client.get_bucket_policy(settings.S3_BUCKET_NAME)
-        my_logger.exception(f"current_policy_str: {current_policy_str}")
-        current_policy = json.loads(current_policy_str)
-        my_logger.exception(f"current_policy: {current_policy}")
+        try:
+            current_policy_str = await minio_client.get_bucket_policy(settings.S3_BUCKET_NAME)
+            if current_policy_str:
+                current_policy = json.loads(current_policy_str)
+                if current_policy == desired_policy:
+                    my_logger.info("✅ Bucket policy is already correct.")
+                else:
+                    my_logger.warning("⚠️ Bucket policy mismatch. Updating...")
+                    await minio_client.set_bucket_policy(settings.S3_BUCKET_NAME, json.dumps(desired_policy))
+                    my_logger.info("✅ Bucket policy updated.")
+            else:
+                my_logger.warning("⚠️ Bucket policy response empty. Applying desired policy...")
+                await minio_client.set_bucket_policy(settings.S3_BUCKET_NAME, json.dumps(desired_policy))
 
-        my_logger.exception(f"current_policy == desired_policy: {current_policy == desired_policy}")
-        if current_policy == desired_policy:
-            my_logger.info("Bucket policy is already set correctly.")
-        else:
-            my_logger.info("Bucket policy mismatch detected. Updating...")
-            await minio_client.set_bucket_policy(bucket_name=settings.S3_BUCKET_NAME, policy=json.dumps(desired_policy))
-            my_logger.info("Bucket policy updated.")
+        except S3Error as s3e:
+            if s3e.code == "NoSuchBucketPolicy":
+                my_logger.warning("⚠️ No bucket policy found. Setting it...")
+                await minio_client.set_bucket_policy(settings.S3_BUCKET_NAME, json.dumps(desired_policy))
+                my_logger.info("✅ Policy applied due to NoSuchBucketPolicy.")
+            else:
+                my_logger.error(f"Unhandled S3Error while getting policy: {s3e}")
+                raise s3e
 
-        return True
+    except MinioException as me:
+        print(f"🌋 MinioException in initialize_minio, e: {me}, type: {type(me)}")
     except Exception as e:
-        print(f"🌋 Failed in initialize_minio: {e}")
-        return False
+        print(f"🌋 Exception in initialize_minio, e: {e}, type: {type(e)}")
 
 
 async def get_object_from_minio(object_name: str) -> bytes:
