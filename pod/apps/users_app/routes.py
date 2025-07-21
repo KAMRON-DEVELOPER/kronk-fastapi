@@ -2,6 +2,11 @@ from random import randint
 from typing import Annotated, Optional
 from uuid import UUID
 
+from bcrypt import checkpw, gensalt, hashpw
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from firebase_admin.auth import UserRecord
+from sqlalchemy import exists, select
+
 from apps.users_app.models import FollowModel, UserModel
 from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     ProfileSchema, ProfileSearchSchema,
@@ -15,9 +20,6 @@ from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     VerifySchema)
 from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
                                   notify_settings_stats, send_email_task)
-from bcrypt import checkpw, gensalt, hashpw
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from firebase_admin.auth import UserRecord
 from services.firebase_service import validate_firebase_token
 from settings.my_database import DBSession
 from settings.my_dependency import (create_jwt_token, headerTokenDependency,
@@ -28,7 +30,6 @@ from settings.my_exceptions import (AlreadyExistException,
 from settings.my_minio import (put_object_to_minio, remove_objects_from_minio,
                                wipe_objects_from_minio)
 from settings.my_redis import cache_manager
-from sqlalchemy import exists, select
 from utility.my_enums import FollowStatus
 from utility.my_logger import my_logger
 from utility.utility import (generate_avatar_url, generate_password_string,
@@ -188,7 +189,8 @@ async def google_auth_route(htd: headerTokenDependency, session: DBSession):
     username: str = generate_unique_username(base_name=f"{firebase_user.display_name}")
     password_string: str = generate_password_string()
 
-    new_user = UserModel(username=username, email=firebase_user.email, password=hashpw(password=password_string.encode(), salt=gensalt(rounds=8)).decode())
+    new_user = UserModel(name=firebase_user.display_name, username=username, email=firebase_user.email,
+                         password=hashpw(password=password_string.encode(), salt=gensalt(rounds=8)).decode())
     session.add(instance=new_user)
     await session.commit()
     await session.refresh(instance=new_user)
@@ -292,7 +294,7 @@ async def update_profile_route(jwt: strictJwtDependency, session: DBSession, sch
 
 @users_router.patch(path="/profile/update/media", response_model=ProfileUpdateMediaSchema, status_code=200)
 async def update_profile_route(
-    jwt: strictJwtDependency, session: DBSession, avatar_file: Annotated[Optional[UploadFile], File()] = None, banner_file: Annotated[Optional[UploadFile], File()] = None
+        jwt: strictJwtDependency, session: DBSession, avatar_file: Annotated[Optional[UploadFile], File()] = None, banner_file: Annotated[Optional[UploadFile], File()] = None
 ):
     try:
         user: Optional[UserModel] = await session.get(UserModel, jwt.user_id)

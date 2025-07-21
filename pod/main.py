@@ -18,6 +18,7 @@ from services.firebase_service import initialize_firebase
 from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
+from settings.my_minio import initialize_minio
 from settings.my_redis import initialize_redis_indexes
 from settings.my_taskiq import broker
 from utility.my_logger import my_logger
@@ -30,38 +31,22 @@ async def app_lifespan(_app: FastAPI):
     my_logger.warning("🚀 Starting app_lifespan...")
 
     try:
-        await initialize_redis_indexes()
-    except Exception as e:
-        my_logger.exception(f"❌ Redis init failed, e: {e}")
-
-    try:
-        await initialize_db()
-    except Exception as e:
-        my_logger.exception(f"❌ DB init failed, e: {e}")
-
-    try:
         initialize_firebase()
-    except Exception as e:
-        my_logger.exception(f"❌ Firebase init failed, e: {e}")
-
-    try:
+        await initialize_redis_indexes()
+        await initialize_db()
+        await initialize_minio()
         instrumentator.expose(_app)
-    except Exception as e:
-        my_logger.exception(f"❌ Prometheus expose failed, e: {e}")
-
-    try:
         if not broker.is_worker_process:
             await broker.startup()
     except Exception as e:
-        my_logger.exception(f"❌ Broker startup failed, e: {e}")
-
+        my_logger.exception(f"Exception in app_lifespan startup, e: {e}")
     yield
 
     try:
         if not broker.is_worker_process:
             await broker.shutdown()
     except Exception as e:
-        my_logger.exception(f"❌ Broker shutdown failed, e: {e}")
+        my_logger.exception(f"Exception in app_lifespan shutdown, e: {e}")
 
 
 app: FastAPI = FastAPI(lifespan=app_lifespan)

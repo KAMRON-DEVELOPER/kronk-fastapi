@@ -630,6 +630,11 @@ class CacheManager:
 
                 # Delete feed metadata and stats
                 pipe.delete(f"feeds:{feed_id}:meta")
+
+                # remove from feeds:online & chats:online
+                pipe.srem("feeds:online", user_id)
+                pipe.srem("chats:online", user_id)
+
             await pipe.execute()
 
             for feed_id in feed_ids:
@@ -764,6 +769,7 @@ class CacheManager:
         return await self.cache_redis.scard(name=f"feeds:{feed_id}:comments")
 
     async def incr_statistics(self):
+        my_logger.error("I'm incrementing stats!!!")
         today_date = date.today().isoformat()
         await self.cache_redis.hincrby(name="statistics", key=today_date)
 

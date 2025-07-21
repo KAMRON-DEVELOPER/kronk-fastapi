@@ -1,3 +1,4 @@
+import json
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
@@ -7,6 +8,7 @@ from miniopy_async.api import Minio
 from miniopy_async.datatypes import Object
 # from miniopy_async.datatypes import ListObjects, Object
 from miniopy_async.helpers import ObjectWriteResult
+
 from settings.my_config import get_settings
 from utility.my_logger import my_logger
 
@@ -21,14 +23,33 @@ minio_client: Minio = Minio(
 )
 
 
-async def minio_ready() -> bool:
+async def initialize_minio() -> bool:
     try:
-        if not await minio_client.bucket_exists(bucket_name=settings.S3_BUCKET_NAME):
-            await minio_client.make_bucket(bucket_name=settings.S3_BUCKET_NAME)
-            # await minio_client.set_bucket_policy(settings.S3_BUCKET_NAME, json.dumps(policy))
+        # Ensure bucket exists
+        if not await minio_client.bucket_exists(settings.S3_BUCKET_NAME):
+            my_logger.info(f"Bucket {settings.S3_BUCKET_NAME} not found. Creating...")
+            await minio_client.make_bucket(settings.S3_BUCKET_NAME)
+            my_logger.info(f"Bucket {settings.S3_BUCKET_NAME} created.")
+        else:
+            my_logger.info(f"Bucket {settings.S3_BUCKET_NAME} exists.")
+
+        # Check and apply policy
+        current_policy_str = await minio_client.get_bucket_policy(settings.S3_BUCKET_NAME)
+        my_logger.exception(f"current_policy_str: {current_policy_str}")
+        current_policy = json.loads(current_policy_str)
+        my_logger.exception(f"current_policy: {current_policy}")
+
+        my_logger.exception(f"current_policy == desired_policy: {current_policy == desired_policy}")
+        if current_policy == desired_policy:
+            my_logger.info("Bucket policy is already set correctly.")
+        else:
+            my_logger.info("Bucket policy mismatch detected. Updating...")
+            await minio_client.set_bucket_policy(bucket_name=settings.S3_BUCKET_NAME, policy=json.dumps(desired_policy))
+            my_logger.info("Bucket policy updated.")
+
         return True
     except Exception as e:
-        print(f"🌋 Failed in check_if_bucket_exists: {e}")
+        print(f"🌋 Failed in initialize_minio: {e}")
         return False
 
 
@@ -91,30 +112,15 @@ async def wipe_objects_from_minio(user_id: str) -> None:
         raise ValueError(f"Exception in wipe_objects_from_minio: {e}")
 
 
-policy = {
+desired_policy = {
     "Version": "2012-10-17",
     "Statement": [
         {
+            "Sid": "PublicReadGetObject",
             "Effect": "Allow",
-            "Principal": {"AWS": "*"},
-            "Action": [
-                "s3:GetBucketLocation",
-                "s3:ListBucket",
-                "s3:ListBucketMultipartUploads",
-            ],
-            "Resource": "arn:aws:s3:::my-bucket",
-        },
-        {
-            "Effect": "Allow",
-            "Principal": {"AWS": "*"},
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-                "s3:DeleteObject",
-                "s3:ListMultipartUploadParts",
-                "s3:AbortMultipartUpload",
-            ],
-            "Resource": "arn:aws:s3:::my-bucket/images/*",
-        },
-    ],
+            "Principal": "*",
+            "Action": ["s3:GetObject"],
+            "Resource": f"arn:aws:s3:::{settings.S3_BUCKET_NAME}/*"
+        }
+    ]
 }

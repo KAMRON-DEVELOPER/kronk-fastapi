@@ -106,7 +106,7 @@ async def generate_avatar_url(user_id: UUID, image_url: str) -> Optional[str]:
 
     try:
         image_data, extension, content_type = await download_image(image_url=image_url)
-        my_logger.debug(f"generate_avatar_url {image_data}, extension : {extension}")
+        my_logger.debug(f"generate_avatar_url len(image_data): {len(image_data)}, extension: {extension}")
         if image_data:
             image_stream: BytesIO = await prepare_image_data(image_data=image_data)
             image_data: bytes = image_stream.read()
