@@ -1,5 +1,13 @@
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
+
+
+# Install ffmpeg (includes ffprobe)
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 

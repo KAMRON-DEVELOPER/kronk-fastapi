@@ -312,9 +312,9 @@ async def update_profile_route(
             avatar_image_width, avatar_image_height = get_image_dimensions(image_bytes=avatar_bytes)
             if avatar_image_width != avatar_image_height:
                 raise ValidationException(detail="Width and height of the avatar image must be equal.")
-            if avatar_image_width > 1024:
+            if avatar_image_width > 2048:
                 raise ValidationException(detail="Avatar image dimensions exceeded limit 400x400px.")
-            if len(avatar_bytes) > 2 * 1024 * 1024:
+            if len(avatar_bytes) > 8 * 1024 * 1024:
                 raise ValidationException(detail="Avatar image size exceeded limit 2MB.")
 
             # avatar_object_name = f"users/{jwt.user_id.hex}/avatar.{avatar_file_extension}"

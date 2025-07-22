@@ -2,14 +2,14 @@ import asyncio
 from typing import Annotated, Optional
 from uuid import UUID
 
-from apps.feeds_app.models import EngagementModel
-from redis.asyncio import Redis
-from settings.my_database import get_session
-from settings.my_redis import cache_manager, my_cache_redis, pubsub_manager
-from settings.my_taskiq import broker
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqDepends
+
+from apps.feeds_app.models import EngagementModel
+from settings.my_database import get_session
+from settings.my_redis import cache_manager, pubsub_manager
+from settings.my_taskiq import broker
 from utility.my_enums import EngagementType, PubSubTopics
 from utility.my_logger import my_logger
 
@@ -37,15 +37,15 @@ async def notify_followers_task(user_id: str):
     my_logger.info(f"📣 Notified {len(online_followers)} followers of {user_id}")
 
 
-# @broker.task(task_name="recalculate_feed_stats", schedule=[{"cron": "*/360 * * * *"}])
-@broker.task(task_name="notify_followers_task")
-async def recalculate_feed_stats(cache: Annotated[Redis, TaskiqDepends(lambda: my_cache_redis)]):
-    my_logger.debug(f"recalculate_feed_stats starting...")
-    # my_logger.debug(f"cache users count: {await cache.hget(name='users', key='count')}")
-    # await cache.hincrby(name="users", key="count")
-    # TODO get feeds
-
-    return {"ok": True}
+# # @broker.task(task_name="recalculate_feed_stats", schedule=[{"cron": "*/360 * * * *"}])
+# @broker.task(task_name="notify_followers_task")
+# async def recalculate_feed_stats(cache: Annotated[Redis, TaskiqDepends(lambda: my_cache_redis)]):
+#     my_logger.debug(f"recalculate_feed_stats starting...")
+#     # my_logger.debug(f"cache users count: {await cache.hget(name='users', key='count')}")
+#     # await cache.hincrby(name="users", key="count")
+#     # TODO get feeds
+#
+#     return {"ok": True}
 
 
 @broker.task(task_name="set_engagement_task")
