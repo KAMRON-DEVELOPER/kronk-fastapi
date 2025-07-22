@@ -1,9 +1,14 @@
 import asyncio
+from datetime import UTC, datetime
+from typing import Optional
+from uuid import uuid4, UUID
 
 from fastapi import APIRouter, WebSocket
 from redis.asyncio.client import PubSub
+
+from apps.chats_app.tasks import create_chat_message_task
 from settings.my_dependency import websocketDependency
-from settings.my_redis import chat_cache_manager, pubsub_manager
+from settings.my_redis import chat_cache_manager, pubsub_manager, cache_manager
 from settings.my_websocket import WebSocketContextManager, chat_ws_manager
 from utility.my_enums import ChatEvent
 from utility.my_logger import my_logger
@@ -28,12 +33,12 @@ async def enter_home(websocket_dependency: websocketDependency):
     }
 
     async with WebSocketContextManager(
-        websocket=websocket,
-        user_id=user_id,
-        connect_handler=chat_connect,
-        disconnect_handler=chat_disconnect,
-        pubsub_generator=chat_pubsub_generator,
-        message_handlers=message_handlers,
+            websocket=websocket,
+            user_id=user_id,
+            connect_handler=chat_connect,
+            disconnect_handler=chat_disconnect,
+            pubsub_generator=chat_pubsub_generator,
+            message_handlers=message_handlers,
     ) as connection:
         await connection.wait_until_disconnected()
 
@@ -42,8 +47,15 @@ async def enter_home(websocket_dependency: websocketDependency):
 async def chat_connect(user_id: str, websocket: WebSocket):
     await chat_ws_manager.connect(user_id=user_id, websocket=websocket)
     participant_ids: set[str] = await chat_cache_manager.add_user_to_chats(user_id=user_id)
-    data = {"type": ChatEvent.goes_online.value, "participant_id": user_id}
+    data = {"type": ChatEvent.goes_online.value, "participant": {"id": user_id}}
     tasks = [pubsub_manager.publish(topic=f"chats:home:{pid}", data=data) for pid in participant_ids]
+
+    user = await cache_manager.get_profile(user_id=user_id)
+    my_logger.warning(f"user {user.get('name')} is now connected.")
+    for pid in participant_ids:
+        is_online = await cache_manager.cache_redis.sismember(name=f"chats:online", value=pid)
+        my_logger.warning(f"is {pid} online: {is_online}")
+
     await asyncio.gather(*tasks)
 
 
@@ -52,39 +64,20 @@ async def chat_disconnect(user_id: str, websocket: WebSocket):
 
     # Notify participants
     participant_ids: set[str] = await chat_cache_manager.remove_user_from_chats(user_id)
-    data = {"type": ChatEvent.goes_offline.value, "participant_id": user_id}
+    data = {"type": ChatEvent.goes_offline.value, "participant": {"id": user_id}}
     tasks = [pubsub_manager.publish(topic=f"chats:home:{pid}", data=data) for pid in participant_ids]
+
+    user = await cache_manager.get_profile(user_id=user_id)
+    my_logger.warning(f"user {user.get('name')} is disconnected.")
+    for pid in participant_ids:
+        is_online = await cache_manager.cache_redis.sismember(name=f"chats:online", value=pid)
+        my_logger.warning(f"is {pid} online: {is_online}")
+
     await asyncio.gather(*tasks)
 
 
 async def chat_pubsub_generator(user_id: str) -> PubSub:
     return await pubsub_manager.subscribe(topic=f"chats:home:{user_id}")
-
-
-# Outgoing(user sending) handler
-async def handle_outgoing_event(chat_event: ChatEvent, user_id: str, data: dict):
-    match chat_event:
-        case ChatEvent.typing_start:
-            chat_id = data.get("chat_id")
-            await chat_cache_manager.add_typing(user_id, chat_id)
-            participant_ids: set[str] = await chat_cache_manager.get_chat_participants(chat_id=chat_id)
-            participant_ids.discard(user_id)
-            for pid in participant_ids:
-                await pubsub_manager.publish(f"chats:home:{pid}", data)
-        case ChatEvent.typing_start:
-            chat_id = data.get("chat_id")
-            await chat_cache_manager.add_typing(user_id, chat_id)
-            participant_ids: set[str] = await chat_cache_manager.get_chat_participants(chat_id=chat_id)
-            participant_ids.discard(user_id)
-            for pid in participant_ids:
-                await pubsub_manager.publish(f"chats:home:{pid}", data)
-        case ChatEvent.sent_message:
-            chat_id = data.get("chat_id")
-            # TODO Save to DB here
-            participant_ids: set[str] = await chat_cache_manager.get_chat_participants(chat_id=chat_id)
-            participant_ids.discard(user_id)
-            for pid in participant_ids:
-                await pubsub_manager.publish(f"chats:home:{pid}", data)
 
 
 # Event handlers
@@ -119,8 +112,40 @@ async def handle_exit_chat(user_id: str, data: dict):
 
 
 async def handle_sent_message(user_id: str, data: dict):
-    my_logger.warning(f"data: {data}")
+    my_logger.warning(f"handle_sent_message data: {data}")
+
+    participant_id: Optional[str] = data.get("participant", {}).get("id", None)
+    if not participant_id:
+        my_logger.error("Missing participant_id in sent_message event.")
+        return
+
+    chat_id: str = data.get("id", "")
+    message = data.get("last_message", {}).get("message", "")
+
+    message_id: UUID = uuid4()
+    now = datetime.now(UTC)
+    now_timestamp = int(now.timestamp())
+
+    await create_chat_message_task.kiq(message_id=message_id, user_id=UUID(hex=user_id), chat_id=UUID(hex=chat_id), message=message)
+
+    mapping = {
+        "id": chat_id,
+        "last_activity_at": data.get("last_activity_at", now_timestamp),
+        "last_message": {
+            "id": message_id.hex,
+            "chat_id": chat_id,
+            "sender_id": data.get("last_message", {}).get("sender_id"),
+            "message": message,
+            "created_at": data.get("last_message", {}).get("created_at", now_timestamp),
+        },
+    }
+
+    # data["last_message"][""] = ''
+
+    await chat_cache_manager.create_chat(user_id=user_id, participant_id=participant_id, chat_id=chat_id, mapping=mapping)
+
     await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
+    await chat_ws_manager.send_personal_message(user_id=participant_id, data=data)
 
 
 async def handle_created_chat(user_id: str, data: dict):

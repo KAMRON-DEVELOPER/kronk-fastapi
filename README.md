@@ -205,6 +205,10 @@ You can link or copy secrets manually:
 
 ```bash
 # POSTGRES
+sudo cp certs/ca/ca.pem /run/secrets/ca.pem
+sudo cp certs/fastapi/fastapi-client-cert.pem /run/secrets/fastapi_client_cert.pem
+sudo cp certs/fastapi/fastapi-client-key.pem /run/secrets/fastapi_client_key.pem
+
 echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db" | sudo tee /run/secrets/DATABASE_URL
 
 # REDIS
@@ -216,6 +220,13 @@ echo "fra1" | sudo tee /run/secrets/S3_REGION
 echo "DO00J2BEN93Y8P6LBEYR" | sudo tee /run/secrets/S3_ACCESS_KEY_ID
 echo "n7zzLc5yZcnXA9f/v+vIVnP3pjxkE6NDNi4CEEnTM+E" | sudo tee /run/secrets/S3_SECRET_KEY
 echo "kronk-bucket" | sudo tee /run/secrets/S3_BUCKET_NAME
+
+# S3 LOCAL
+echo "localhost:9000" | sudo tee /run/secrets/S3_ENDPOINT
+echo "fra1" | sudo tee /run/secrets/S3_REGION
+echo "DO00J2BEN93Y8P6LBEYR" | sudo tee /run/secrets/S3_ACCESS_KEY_ID
+echo "n7zzLc5yZcnXA9f/v+vIVnP3pjxkE6NDNi4CEEnTM+E" | sudo tee /run/secrets/S3_SECRET_KEY
+echo "kronk-digitalocean-bucket" | sudo tee /run/secrets/S3_BUCKET_NAME
 
 # FASTAPI-JWT
 echo "f94b638b565c503932b657534d1f044b7f1c8acfb76170e80851704423a49186" | sudo tee /run/secrets/SECRET_KEY

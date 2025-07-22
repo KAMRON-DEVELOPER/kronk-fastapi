@@ -2,6 +2,10 @@ from datetime import UTC, datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
+from fastapi import APIRouter
+from sqlalchemy import exists, func, select
+from sqlalchemy.orm import selectinload
+
 from apps.chats_app.models import (ChatMessageModel, ChatModel,
                                    ChatParticipantModel)
 from apps.chats_app.schemas import (ChatMessageResponseSchema,
@@ -9,13 +13,11 @@ from apps.chats_app.schemas import (ChatMessageResponseSchema,
                                     ChatSchema, CreateMessageSchema,
                                     ParticipantSchema)
 from apps.users_app.schemas import ResultSchema
-from fastapi import APIRouter
 from settings.my_database import DBSession
 from settings.my_dependency import strictJwtDependency
 from settings.my_exceptions import ApiException
 from settings.my_redis import cache_manager, chat_cache_manager, pubsub_manager
-from sqlalchemy import exists, func, select
-from sqlalchemy.orm import selectinload
+from utility.my_enums import ChatEvent
 from utility.my_logger import my_logger
 
 chats_router = APIRouter()
@@ -56,11 +58,32 @@ async def create_chat_route(jwt: strictJwtDependency, session: DBSession, schema
         mapping = {
             "id": chat_id.hex,
             "last_activity_at": now_timestamp,
-            "last_message": {"id": message_id.hex, "chat_id": chat_id.hex, "sender_id": jwt.user_id.hex, "message": schema.message, "created_at": now_timestamp},
+            "last_message": {
+                "id": message_id.hex,
+                "chat_id": chat_id.hex,
+                "sender_id": jwt.user_id.hex,
+                "message": schema.message,
+                "created_at": now_timestamp,
+            },
         }
         await chat_cache_manager.create_chat(user_id=jwt.user_id.hex, participant_id=participant_id.hex, chat_id=chat_id.hex, mapping=mapping)
 
         is_online = await chat_cache_manager.is_online(participant_id=participant_id.hex)
+
+        if is_online:
+            data = {
+                **mapping,
+                "type": ChatEvent.created_chat.value,
+                "participant": {
+                    "id": jwt.user_id.hex,
+                    "name": participant_profile.get("name"),
+                    "username": participant_profile.get("username"),
+                    "avatar_url": participant_profile.get("avatar_url"),
+                    "last_seen_at": now_timestamp,
+                    "is_online": True,
+                },
+            }
+            await pubsub_manager.publish(topic=f"chats:home:{participant_id.hex}", data=data)
 
         response = ChatSchema(
             id=chat_id,
@@ -75,22 +98,6 @@ async def create_chat_route(jwt: strictJwtDependency, session: DBSession, schema
             last_activity_at=now,
             last_message=ChatMessageSchema(id=message_id, chat_id=chat_id, sender_id=jwt.user_id, message=schema.message, created_at=now),
         )
-
-        if is_online:
-            participant_profile = await cache_manager.get_profile(jwt.user_id.hex)
-
-            data = {
-                **mapping,
-                "participant": {
-                    "id": jwt.user_id.hex,
-                    "name": participant_profile.get("name"),
-                    "username": participant_profile.get("username"),
-                    "avatar_url": participant_profile.get("avatar_url"),
-                    "last_seen_at": now_timestamp,
-                    "is_online": True,
-                },
-            }
-            await pubsub_manager.publish(topic=f"chats:home:{participant_id.hex}", data=data)
 
         return response
     except Exception as e:
@@ -136,23 +143,14 @@ async def get_chats_route(jwt: strictJwtDependency, start: int = 0, end: int = 2
 async def get_chat_messages_route(_: strictJwtDependency, session: DBSession, chat_id: UUID, start: int = 0, end: int = 20):
     try:
         my_logger.warning("1")
-        count_stmt = select(func.count()).where(ChatMessageModel.chat_id == chat_id)
-        count_result = await session.execute(count_stmt)
-        total_messages = count_result.scalar_one()
 
-        my_logger.warning("2")
-        if total_messages:
-            return {"messages": [], "end": 0}
-
-        my_logger.warning("3")
-
-        stmt = select(ChatMessageModel).where(ChatMessageModel.chat_id == chat_id).order_by(ChatMessageModel.created_at.desc()).offset(start).limit(end - start)
+        stmt = select(ChatMessageModel).where(ChatMessageModel.chat_id == chat_id).order_by(ChatMessageModel.created_at.asc()).offset(start).limit(end - start)
         result = await session.scalars(stmt)
         messages: list[ChatMessageModel] = result.all()
-        my_logger.warning("4")
+        my_logger.warning(f"2, len: {len(messages)}")
 
-        response = ChatMessageResponseSchema(messages=[ChatMessageSchema.model_validate(obj=message) for message in messages], end=total_messages - 1)
-        my_logger.warning("5")
+        response = ChatMessageResponseSchema(messages=[ChatMessageSchema.model_validate(obj=message) for message in messages], end=len(messages) - 1)
+        my_logger.warning("3")
         return response
     except Exception as e:
         my_logger.exception(f"Exception e: {e}")

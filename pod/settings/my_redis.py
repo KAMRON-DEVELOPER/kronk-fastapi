@@ -203,19 +203,39 @@ class ChatCacheManager:
     """ ****************************************** EVENTS ****************************************** """
 
     async def add_user_to_chats(self, user_id: str) -> set[str]:
+        chat_ids: list[str] = await self.cache_redis.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
+
         async with self.cache_redis.pipeline() as pipe:
             pipe.sadd(f"chats:online", user_id)
-            pipe.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
+            for chat_id in chat_ids:
+                pipe.smembers(f"chats:{chat_id}:participants")
             results = await pipe.execute()
-        return results[1]
+
+        # Skip the first result which is from `sadd`
+        all_participants_sets = results[1:]
+        my_logger.warning(f"all_participants_sets: {all_participants_sets}")
+        # Flatten and exclude self
+        other_participants = {pid for pset in all_participants_sets for pid in pset if pid != user_id}
+        my_logger.warning(f"other_participants: {other_participants}")
+        return other_participants
 
     async def remove_user_from_chats(self, user_id: str) -> set[str]:
+        chat_ids: list[str] = await self.cache_redis.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
+
         async with self.cache_redis.pipeline() as pipe:
             pipe.srem(f"chats:online", user_id)
-            pipe.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
+            for chat_id in chat_ids:
+                pipe.smembers(f"chats:{chat_id}:participants")
             pipe.hset(f"users:{user_id}:profile", key="last_seen_at", value=int(datetime.now(UTC).timestamp()))
             results = await pipe.execute()
-        return results[1]
+
+        # Skip the first result which is from `sadd`
+        all_participants_sets = results[1:-1]
+        my_logger.warning(f"all_participants_sets: {all_participants_sets}")
+        # Flatten and exclude self
+        other_participants = {pid for pset in all_participants_sets for pid in pset if pid != user_id}
+        my_logger.warning(f"other_participants: {other_participants}")
+        return other_participants
 
     async def add_typing(self, user_id: str, chat_id: str):
         await self.cache_redis.sadd(f"typing:{chat_id}", user_id)

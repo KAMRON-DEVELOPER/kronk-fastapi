@@ -20,7 +20,7 @@ minio_client: Minio = Minio(
     secret_key=settings.S3_SECRET_KEY,
     endpoint=settings.S3_ENDPOINT,
     region=settings.S3_REGION,
-    secure=True,
+    secure=False if settings.DEBUG else True,
 )
 
 
