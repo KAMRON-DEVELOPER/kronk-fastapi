@@ -195,6 +195,9 @@ class ChatCacheManager:
 
     async def is_user_chat_owner(self, user_id: str, chat_id: str) -> bool:
         score: Optional[float] = await self.cache_redis.zscore(name=f"users:{user_id}:chats", value=chat_id)
+        my_logger.warning(f"user_id: {user_id}")
+        my_logger.warning(f"chat_id: {chat_id}")
+        my_logger.warning(f"score: {score}")
         return False if score is None else True
 
     async def is_online(self, participant_id: str) -> bool:
