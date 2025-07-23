@@ -79,6 +79,16 @@ async def terms_of_service(request: Request):
     return templates.TemplateResponse("terms_of_service.html", {"request": request})
 
 
+@app.get("/account-deletion-info", response_class=HTMLResponse, include_in_schema=False)
+async def terms_of_service(request: Request):
+    return templates.TemplateResponse("account_deletion_info.html", {"request": request})
+
+
+@app.get("/safety", response_class=HTMLResponse, include_in_schema=False)
+async def terms_of_service(request: Request):
+    return templates.TemplateResponse("safety.html", {"request": request})
+
+
 # HTTP Routes
 app.include_router(router=users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(router=feed_router, prefix="/api/v1/feeds", tags=["feeds"])

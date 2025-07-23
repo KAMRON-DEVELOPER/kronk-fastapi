@@ -365,7 +365,7 @@ async def validate_and_save_video(user_id: str, video_file: UploadFile) -> str:
             await out_file.flush()
 
         duration = await get_video_duration_using_ffprobe(str(faststart_video_path))
-        if duration > 220:
+        if duration > 300:
             raise ValidationException("Video exceeds max allowed duration (220 seconds).")
 
         ffmpeg = FFmpeg().input(str(faststart_video_path)).output(str(temp_video_path), c="copy", movflags="faststart")

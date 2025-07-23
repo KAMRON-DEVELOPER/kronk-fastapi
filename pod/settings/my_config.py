@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DEBUG: bool = True
-    
+    DEBUG: bool = False
+
     BASE_DIR: Path = Path(__file__).parent.parent.resolve()
     TEMP_IMAGES_FOLDER_PATH: Path = BASE_DIR / "static/images"
     TEMP_VIDEOS_FOLDER_PATH: Path = BASE_DIR / "static/videos"
