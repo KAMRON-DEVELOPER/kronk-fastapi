@@ -14,6 +14,7 @@ from apps.chats_app.ws import chat_ws_router
 from apps.feeds_app.routes import feed_router
 from apps.feeds_app.ws import feed_ws_router
 from apps.users_app.routes import users_router
+from apps.vocabulary_app.routes import vocabulary_router
 from services.firebase_service import initialize_firebase
 from settings.my_config import get_settings
 from settings.my_database import initialize_db
@@ -93,6 +94,7 @@ async def terms_of_service(request: Request):
 app.include_router(router=users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(router=feed_router, prefix="/api/v1/feeds", tags=["feeds"])
 app.include_router(router=chats_router, prefix="/api/v1/chats", tags=["chats"])
+app.include_router(router=vocabulary_router, prefix="/api/v1/vocabulary", tags=["vocabulary"])
 
 # Websocket Routes
 app.include_router(router=admin_ws_router, prefix="/api/v1/admin", tags=["admin ws"])

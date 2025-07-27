@@ -36,6 +36,10 @@ dependencies = [
     "taskiq[reload]",
     "taskiq_redis",
     "taskiq-fastapi",
+    "google-cloud-vision",
+    "google-cloud-translate",
+    # "google-cloud-storage",
+    "gcloud-aio-storage",
 ]
 
 [tool.pyright]

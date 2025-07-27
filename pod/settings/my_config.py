@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     FIREBASE_ADMINSDK: Optional[str] = None
     FIREBASE_ADMINSDK_PATH: Path = BASE_DIR / "certs/kronk-production-firebase-adminsdk.json"
 
+    # FIREBASE ADMIN SDK
+    GCP_PROJECT_ID: str = "1081239849482"
+    GCS_BUCKET_NAME: str = "kronk-gcs-bucket"
+    GCP_CREDENTIALS: Optional[str] = None
+    GCP_CREDENTIALS_PATH: Path = BASE_DIR / "certs/kronk-production-gcp-credentials.json"
+
     # S3
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_KEY: str = ""
@@ -55,6 +61,9 @@ class Settings(BaseSettings):
 
         if self.FIREBASE_ADMINSDK:
             self.FIREBASE_ADMINSDK_PATH = secret_base / "FIREBASE_ADMINSDK"
+
+        if self.GCP_CREDENTIALS:
+            self.GCP_CREDENTIALS_PATH = secret_base / "GCP_CREDENTIALS"
 
         if self.CA:
             self.CA_PATH = secret_base / "CA"

@@ -16,6 +16,8 @@ if TYPE_CHECKING:
                                     ChatParticipantModel, GroupMessageModel,
                                     GroupModel, GroupParticipantModel)
     from ..feeds_app.models import EngagementModel, FeedModel, ReportModel
+    from ..notes_app.models import NoteModel, TabModel
+    from ..vocabulary_app.models import VocabularyModel
 
 
 class Base(DeclarativeBase):
@@ -45,7 +47,7 @@ class FollowModel(BaseModel):
 class UserModel(BaseModel):
     __tablename__ = "user_table"
 
-    name: Mapped[str] = mapped_column(String(length=50), nullable=True)
+    name: Mapped[str] = mapped_column(String(length=50), nullable=True, index=True)
     username: Mapped[str] = mapped_column(String(length=50), index=True)
     email: Mapped[str] = mapped_column(String(length=50), index=True)
     phone_number: Mapped[Optional[str]] = mapped_column(String(length=50), nullable=True)
@@ -80,6 +82,27 @@ class UserModel(BaseModel):
     chat_participants: Mapped[list["ChatParticipantModel"]] = relationship(argument="ChatParticipantModel", back_populates="user", passive_deletes=True)
     chats: Mapped[list["ChatModel"]] = relationship(secondary="chat_participant_table", back_populates="users", viewonly=True)
     chat_messages: Mapped[list["ChatMessageModel"]] = relationship(argument="ChatMessageModel", back_populates="sender")
+    tabs: Mapped[list["TabModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    collaborative_notes: Mapped[list["NoteModel"]] = relationship(secondary="note_collaborator_link_table", back_populates="collaborators", viewonly=False)
+    notes: Mapped[list["NoteModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    collaborative_vocabularies: Mapped[list["VocabularyModel"]] = relationship(secondary="vocabulary_collaborator_link_table", back_populates="collaborators", viewonly=False)
+    vocabularies: Mapped[list["NoteModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+
+    # @hybrid_property
+    # def followers_count(self):
+    #     return len(self.followers)
+
+    # @hybrid_property
+    # def followings_count(self):
+    #     return len(self.followings)
+
+    # @followers_count.expression
+    # def followers_count(cls):  # noqa
+    #     return select(func.count(FollowModel.id)).where(FollowModel.following_id == cls.id).label("followers_count")
+
+    # @followings_count.expression
+    # def followings_count(cls):  # noqa
+    #     return select(func.count(FollowModel.id)).where(FollowModel.follower_id == cls.id).label("followings_count")
 
     def __repr__(self):
         return f"UserModel of {self.username}"
