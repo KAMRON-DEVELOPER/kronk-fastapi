@@ -1,11 +1,15 @@
 from datetime import datetime
 from typing import Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, UUID, String, Text, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from apps.users_app.models import UserModel, BaseModel
+
+if TYPE_CHECKING:
+    from ..vocabulary_app.models import VocabularyModel
 
 
 # note_collaborator_table = Table(
@@ -22,6 +26,9 @@ class TabModel(BaseModel):
     name: Mapped[str] = mapped_column(String(length=30))
     owner_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey(column="user_table.id", ondelete="CASCADE"))
     owner: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="tabs", passive_deletes=True)
+
+    notes: Mapped[list["NoteModel"]] = relationship(back_populates="tab", cascade="all, delete-orphan", passive_deletes=True)
+    vocabularies: Mapped[list["VocabularyModel"]] = relationship(back_populates="tab", cascade="all, delete-orphan", passive_deletes=True)
 
     def __repr__(self):
         return f"TabModel: {self.name}"

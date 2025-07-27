@@ -1,11 +1,10 @@
-import asyncio
 import os
-from itertools import islice
 
+import aiofiles
 from fastapi import APIRouter, UploadFile, status
 
 from apps.users_app.schemas import ResultSchema
-from apps.vocabulary_app.tasks import create_vocabulary_task, upload_to_gcs
+from apps.vocabulary_app.tasks import start_ocr_upload_pipeline
 from settings.my_config import get_settings
 from settings.my_dependency import strictJwtDependency
 
@@ -14,31 +13,21 @@ vocabulary_router = APIRouter()
 settings = get_settings()
 
 
-def chunked(iterable, size):
-    it = iter(iterable)
-    while chunk := list(islice(it, size)):
-        yield chunk
-
-
 @vocabulary_router.post(path="/create", response_model=ResultSchema, status_code=200)
 async def upload_images(jwt: strictJwtDependency, images: list[UploadFile], target_language_code: str = "uz"):
     try:
-        print(f"📝 content_type when post: {images}")
+        images_folder_path = settings.TEMP_IMAGES_FOLDER_PATH / jwt.user_id.hex
+        images_folder_path.mkdir(parents=True, exist_ok=True)
 
-        blob_names = []
+        for image in images:
+            file_path = os.path.join(images_folder_path, image.filename)
+            async with aiofiles.open(file_path, mode="wb") as f:
+                while chunk := await image.read(size=1024 * 1024):
+                    await f.write(chunk)
 
-        for chunk in chunked(images, 10):
-            tasks = []
-            for image in chunk:
-                blob_name = f"{jwt.user_id.hex}/{image.filename}"
-                file_bytes = await image.read()
-                blob_names.append(blob_name)
-                tasks.append(upload_to_gcs(file_bytes, blob_name))
-            await asyncio.gather(*tasks)
+        image_paths = [str(images_folder_path / fname) for fname in os.listdir(images_folder_path)]
 
-        output_prefix = f"ocr_output/{jwt.user_id.hex}/"
-
-        await create_vocabulary_task.kiq(owner_id=jwt.user_id, blob_names=blob_names, output_prefix=output_prefix, target_language_code=target_language_code)
+        await start_ocr_upload_pipeline.kiq(user_id=jwt.user_id.hex, target_language_code=target_language_code, image_paths=image_paths)
 
         return {"ok": True}
     except Exception as e:
@@ -76,14 +65,3 @@ async def get_images():
     except Exception as e:
         print(f"🌋 Exception while reading file: {e}")
         return "fuck off!"
-
-# images_folder_path = settings.TEMP_IMAGES_FOLDER_PATH / jwt.user_id.hex
-# try:
-#     for image in images:
-#         file_path = os.path.join(images_folder_path, image.filename)
-#         async with aiofiles.open(file_path, mode="wb") as f:
-#             while chunk := await image.read(size=1024 * 1024):
-#                 await f.write(chunk)
-# except Exception as e:
-#     print(f"🌋 Exception while writing file: {e}")
-#     return {"ok": False}

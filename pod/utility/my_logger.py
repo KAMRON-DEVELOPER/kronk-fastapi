@@ -5,8 +5,7 @@ from loguru import logger as my_logger
 
 
 def custom_log_sink(message):
-    """Custom Loguru Sink - Extracts Stack Trace and Formats Logs."""
-    # ANSI color codes for console
+    """Custom Loguru Sink with clickable file paths."""
     reset = "\033[0m"
     red = "\033[31m"
     green = "\033[32m"
@@ -16,7 +15,6 @@ def custom_log_sink(message):
     cyan = "\033[36m"
     white = "\033[37m"
 
-    # Log level mapping with colors and emojis
     log_levels = {
         "TRACE": {"emoji": "🔍", "color": cyan},
         "DEBUG": {"emoji": "🐛", "color": blue},
@@ -27,17 +25,20 @@ def custom_log_sink(message):
     }
 
     record = message.record
-    message = record.get("message")
-    full_path = Path(__file__).parent.parent.parent
-    relative_path = Path(record.get("file").path).relative_to(full_path)
+    msg = record["message"]
 
-    # Extract log level information
     level = record["level"].name
     color = log_levels.get(level, {}).get("color", white)
     emoji = log_levels.get(level, {}).get("emoji", "📌")
 
-    # Print to standard output
-    sys.stdout.write(f"{color}({relative_path})    {emoji} {message}{reset}\n")
+    full_path = Path(record["file"].path)
+    relative_path = full_path.relative_to(Path(__file__).parent.parent.parent)
+    line = record["line"]
+
+    # Format for clickability: file.py:123
+    clickable_path = f"{relative_path}:{line}"
+
+    sys.stdout.write(f"{color}{clickable_path}    {emoji} {msg}{reset}\n")
 
 
 my_logger.remove()

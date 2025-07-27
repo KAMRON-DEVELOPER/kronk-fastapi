@@ -86,7 +86,7 @@ class UserModel(BaseModel):
     collaborative_notes: Mapped[list["NoteModel"]] = relationship(secondary="note_collaborator_link_table", back_populates="collaborators", viewonly=False)
     notes: Mapped[list["NoteModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
     collaborative_vocabularies: Mapped[list["VocabularyModel"]] = relationship(secondary="vocabulary_collaborator_link_table", back_populates="collaborators", viewonly=False)
-    vocabularies: Mapped[list["NoteModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    vocabularies: Mapped[list["VocabularyModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
 
     # @hybrid_property
     # def followers_count(self):
