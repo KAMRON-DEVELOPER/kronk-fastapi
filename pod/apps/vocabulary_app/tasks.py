@@ -27,23 +27,32 @@ except Exception as e:
 
 
 async def upload_to_gcs(file_bytes: bytes, blob_name: str):
-    async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
-        await client.upload(bucket=settings.GCS_BUCKET_NAME, object_name=blob_name, file_data=file_bytes)
+    try:
+        async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
+            await client.upload(bucket=settings.GCS_BUCKET_NAME, object_name=blob_name, file_data=file_bytes)
 
-    print(f"✅ Uploaded to: gs://{settings.GCS_BUCKET_NAME}/{blob_name}")
-    return f"gs://{settings.GCS_BUCKET_NAME}/{blob_name}"
+        print(f"✅ Uploaded to: gs://{settings.GCS_BUCKET_NAME}/{blob_name}")
+        return f"gs://{settings.GCS_BUCKET_NAME}/{blob_name}"
+    except Exception as ex:
+        my_logger.exception(f"upload image failed: {ex}")
+        raise ex
 
 
 async def download_ocr_result(output_prefix: str) -> str:
-    async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
-        objects = await client.list_objects(bucket=settings.GCS_BUCKET_NAME)
-        for obj in objects.get('items', []):
-            if obj['name'].startswith(output_prefix) and obj['name'].endswith('.json'):
-                content = await client.download(settings.GCS_BUCKET_NAME, obj['name'])
-                response = json.loads(content.decode())
-                text = response['responses'][0]['fullTextAnnotation']['text']
-                return text
-    raise Exception("OCR result not found")
+    try:
+        async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
+            objects = await client.list_objects(bucket=settings.GCS_BUCKET_NAME)
+            for obj in objects.get('items', []):
+                if obj['name'].startswith(output_prefix) and obj['name'].endswith('.json'):
+                    content = await client.download(settings.GCS_BUCKET_NAME, obj['name'])
+                    response = json.loads(content.decode())
+                    my_logger.warning(f"response: {response}")
+                    text = response['responses'][0]['fullTextAnnotation']['text']
+                    return text
+            raise Exception("OCR result not found")
+    except Exception as ex:
+        my_logger.exception(f"download ocr failed: {ex}")
+        raise ex
 
 
 def delete_gcs_folder(bucket_name: str, folder_prefix: str):

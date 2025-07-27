@@ -1,5 +1,6 @@
 import asyncio
 import os
+from itertools import islice
 
 from fastapi import APIRouter, UploadFile, status
 
@@ -13,26 +14,36 @@ vocabulary_router = APIRouter()
 settings = get_settings()
 
 
+def chunked(iterable, size):
+    it = iter(iterable)
+    while chunk := list(islice(it, size)):
+        yield chunk
+
+
 @vocabulary_router.post(path="/create", response_model=ResultSchema, status_code=200)
 async def upload_images(jwt: strictJwtDependency, images: list[UploadFile], target_language_code: str = "uz"):
-    print(f"📝 content_type when post: {images}")
+    try:
+        print(f"📝 content_type when post: {images}")
 
-    blob_names = []
-    tasks = []
+        blob_names = []
 
-    for image in images:
-        blob_name = f"{jwt.user_id.hex}/{image.filename}"
-        file_bytes = await image.read()
-        blob_names.append(blob_name)
-        tasks.append(upload_to_gcs(file_bytes=file_bytes, blob_name=blob_name))
+        for chunk in chunked(images, 10):
+            tasks = []
+            for image in chunk:
+                blob_name = f"{jwt.user_id.hex}/{image.filename}"
+                file_bytes = await image.read()
+                blob_names.append(blob_name)
+                tasks.append(upload_to_gcs(file_bytes, blob_name))
+            await asyncio.gather(*tasks)
 
-    await asyncio.gather(*tasks)
+        output_prefix = f"ocr_output/{jwt.user_id.hex}/"
 
-    output_prefix = f"ocr_output/{jwt.user_id.hex}/"
+        await create_vocabulary_task.kiq(owner_id=jwt.user_id, blob_names=blob_names, output_prefix=output_prefix, target_language_code=target_language_code)
 
-    await create_vocabulary_task.kiq(owner_id=jwt.user_id, blob_names=blob_names, output_prefix=output_prefix, target_language_code=target_language_code)
-
-    return {"ok": True}
+        return {"ok": True}
+    except Exception as e:
+        print(f"🌋 Exception while uploading images: {e}")
+        return {"ok": False}
 
 
 @vocabulary_router.get(path="/vocabulary/images/get", status_code=status.HTTP_200_OK)
