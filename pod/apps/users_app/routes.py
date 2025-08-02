@@ -211,7 +211,6 @@ async def google_auth_route(htd: headerTokenDependency, session: DBSession):
 
 @users_router.get(path="/profile", response_model=ProfileSearchSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
 async def get_profile_route(jwt: strictJwtDependency, session: DBSession, target_user_id: Optional[str] = None):
-    my_logger.info(f"target_user_id: {target_user_id}, type: {type(target_user_id)}")
     cached_user: Optional[dict] = await cache_manager.get_profile(user_id=jwt.user_id.hex, target_user_id=target_user_id)
 
     if cached_user:

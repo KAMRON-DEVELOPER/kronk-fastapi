@@ -25,7 +25,7 @@ from apps.users_app.models import *  # noqa
 from apps.feeds_app.models import *  # noqa
 from apps.chats_app.models import *  # noqa
 from apps.notes_app.models import *  # noqa
-from apps.vocabulary_app.models import *  # noqa
+from apps.vocabularies_app.models import *  # noqa
 
 target_metadata = BaseModel.metadata
 

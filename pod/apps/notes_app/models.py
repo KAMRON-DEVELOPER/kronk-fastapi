@@ -1,15 +1,11 @@
 from datetime import datetime
 from typing import Optional
-from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, UUID, String, Text, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from apps.users_app.models import UserModel, BaseModel
-
-if TYPE_CHECKING:
-    pass
 
 
 # note_collaborator_table = Table(

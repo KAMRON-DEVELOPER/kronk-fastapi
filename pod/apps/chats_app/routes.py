@@ -132,7 +132,6 @@ async def delete_chat_route(jwt: strictJwtDependency, session: DBSession, chat_i
 async def get_chats_route(jwt: strictJwtDependency, start: int = 0, end: int = 20):
     try:
         response: ChatResponseSchema = await chat_cache_manager.get_chats(user_id=jwt.user_id.hex, start=start, end=end)
-        my_logger.debug(f"length of response.chats: {len(response.chats)}, response.end: {response.end}")
         return response
     except Exception as e:
         my_logger.exception(f"Exception e: {e}")

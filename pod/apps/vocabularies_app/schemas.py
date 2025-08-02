@@ -5,25 +5,25 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class DefinitionSchema(BaseModel):
+class DefinitionIn(BaseModel):
     definition: str
     example: Optional[str] = None
 
 
-class MeaningSchema(BaseModel):
-    part_of_speech: str
-    definitions: list[DefinitionSchema] = Field(default_factory=list)
+class MeaningIn(BaseModel):
+    part_of_speech: str = Field(alias="partOfSpeech")
+    definitions: list[DefinitionIn] = Field(default_factory=list)
 
 
-class PhoneticSchema(BaseModel):
+class PhoneticIn(BaseModel):
     text: Optional[str]
     audio: Optional[str]
 
 
 class DictionaryIn(BaseModel):
     word: str
-    phonetics: list[PhoneticSchema] = Field(default_factory=list)
-    meanings: list[MeaningSchema]
+    phonetics: list[PhoneticIn] = Field(default_factory=list)
+    meanings: list[MeaningIn] = Field(default_factory=list)
 
 
 ''' OUTPUT '''
@@ -90,3 +90,13 @@ class SentenceOut(BaseModel):
     class Config:
         from_attributes = True
         json_encoders = {UUID: lambda v: v.hex, datetime: lambda v: int(v.timestamp()) if v is not None else None}
+
+
+class VocabularyResponse(BaseModel):
+    vocabularies: list[VocabularyOut]
+    end: int
+
+
+class SentenceResponse(BaseModel):
+    sentences: list[SentenceOut]
+    end: int

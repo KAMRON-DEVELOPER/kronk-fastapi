@@ -16,10 +16,10 @@ class SentenceModel(BaseModel):
     target_language: Mapped[str] = mapped_column(String(length=10), default="uz")
     owner_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("user_table.id", ondelete="CASCADE"))
     owner: Mapped["UserModel"] = relationship("UserModel", back_populates="sentences")
-    words: Mapped[list["VocabularyModel"]] = relationship(secondary="sentence_word_association", back_populates="sentences", cascade="all, delete")
+    words: Mapped[list["VocabularyModel"]] = relationship(secondary="sentence_word_association", back_populates="sentences")
 
     def __repr__(self):
-        return "SentenceModel"
+        return f"SentenceModel, sentence: {self.sentence[:10]}"
 
 
 class SentenceWordAssociation(BaseModel):
@@ -30,9 +30,8 @@ class SentenceWordAssociation(BaseModel):
 
 class VocabularyModel(BaseModel):
     __tablename__ = "vocabulary_table"
-    __table_args__ = (UniqueConstraint('word', 'owner_id', name='_word_owner_uc'))
 
-    word: Mapped[str] = mapped_column(String(length=255))
+    word: Mapped[str] = mapped_column(String(length=255), unique=True)
     translation: Mapped[str] = mapped_column(String(length=255))
     target_language: Mapped[str] = mapped_column(String(length=10), default="uz")
     phonetics: Mapped[list["PhoneticModel"]] = relationship(back_populates="vocabulary")

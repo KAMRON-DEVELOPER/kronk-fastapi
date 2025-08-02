@@ -7,7 +7,7 @@ from pydantic import BaseModel, field_validator
 from settings.my_exceptions import ValidationException
 
 
-class NoteCreateSchema(BaseModel):
+class NoteIn(BaseModel):
     title: str
     body: str
     background_color: Optional[str] = None
@@ -16,7 +16,6 @@ class NoteCreateSchema(BaseModel):
     remind_at: Optional[datetime] = None
     is_pinned: bool = False
     tab_id: Optional[UUID] = None
-    collaborator_ids: Optional[list[UUID]] = None
 
     class Config:
         use_enum_values = True
@@ -24,7 +23,7 @@ class NoteCreateSchema(BaseModel):
         json_encoders = {UUID: lambda v: v.hex, datetime: lambda v: int(v.timestamp()) if v is not None else None}
 
 
-class NoteSchema(BaseModel):
+class NoteOut(BaseModel):
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -53,8 +52,8 @@ class NoteSchema(BaseModel):
         return value
 
 
-class NoteResponseSchema(BaseModel):
-    notes: list[NoteSchema] = []
+class NoteResponse(BaseModel):
+    notes: list[NoteOut] = []
     end: int = 0
 
     class Config:

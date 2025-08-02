@@ -16,8 +16,8 @@ if TYPE_CHECKING:
                                     ChatParticipantModel, GroupMessageModel,
                                     GroupModel, GroupParticipantModel)
     from ..feeds_app.models import EngagementModel, FeedModel, ReportModel
+    from ..vocabularies_app.models import SentenceModel, VocabularyModel
     from ..notes_app.models import NoteModel
-    from ..vocabulary_app.models import SentenceModel, VocabularyModel
 
 
 class Base(DeclarativeBase):
@@ -83,9 +83,9 @@ class UserModel(BaseModel):
     chats: Mapped[list["ChatModel"]] = relationship(secondary="chat_participant_table", back_populates="users", viewonly=True)
     chat_messages: Mapped[list["ChatMessageModel"]] = relationship(argument="ChatMessageModel", back_populates="sender")
     # tabs: Mapped[list["TabModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
-    notes: Mapped[list["NoteModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
     vocabularies: Mapped[list["VocabularyModel"]] = relationship(secondary="user_vocabulary_table", back_populates="users", cascade="all, delete")
-    sentences: Mapped[list["SentenceModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    sentences: Mapped[list["SentenceModel"]] = relationship(argument="SentenceModel", back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    notes: Mapped[list["NoteModel"]] = relationship(argument="NoteModel", back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
 
     # @hybrid_property
     # def followers_count(self):

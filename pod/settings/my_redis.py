@@ -141,8 +141,6 @@ class ChatCacheManager:
                 pipe.smembers(f"chats:{chat_id}:participants")  # index 2, 5, 8...
             results = await pipe.execute()
 
-        my_logger.warning(f"results: {results}")
-
         chats: list[dict] = results[::3]  # Every 3rd element starting at 0
         last_messages: list[dict] = results[1::3]  # Every 3rd element starting at 1
         participant_sets: list[set[str]] = results[2::3]  # Every 3rd element starting at 2

@@ -1,8 +1,8 @@
-"""some fixes model
+"""no_cascade_for_sentence words
 
-Revision ID: 49ad1dc30bf7
-Revises: e72c1bf6b0bf
-Create Date: 2025-07-27 16:22:51.387543
+Revision ID: 6f740d75fb6a
+Revises: 243c3fb6c88f
+Create Date: 2025-08-02 15:50:02.743600
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '49ad1dc30bf7'
-down_revision: Union[str, Sequence[str], None] = 'e72c1bf6b0bf'
+revision: str = '6f740d75fb6a'
+down_revision: Union[str, Sequence[str], None] = '243c3fb6c88f'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
