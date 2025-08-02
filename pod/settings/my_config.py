@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+import spacy
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -55,6 +56,9 @@ class Settings(BaseSettings):
     # EMAIL
     EMAIL_SERVICE_API_KEY: str = ""
 
+    # LINGVANEX
+    LINGVANEX_API_KEY: str = ""
+
     @model_validator(mode="after")
     def inject_secret_file_paths(self):
         secret_base = Path("/run/secrets")
@@ -82,3 +86,8 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings():
     return Settings()
+
+
+@lru_cache(maxsize=1)
+def get_nlp():
+    return spacy.load("en_core_web_sm")

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from apps.users_app.models import UserModel, BaseModel
 
 if TYPE_CHECKING:
-    from ..vocabulary_app.models import VocabularyModel
+    pass
 
 
 # note_collaborator_table = Table(
@@ -20,25 +20,18 @@ if TYPE_CHECKING:
 # )
 
 
-class TabModel(BaseModel):
-    __tablename__ = "tab_table"
+# class TabModel(BaseModel):
+#     __tablename__ = "tab_table"
 
-    name: Mapped[str] = mapped_column(String(length=30))
-    owner_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey(column="user_table.id", ondelete="CASCADE"))
-    owner: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="tabs", passive_deletes=True)
+#     name: Mapped[str] = mapped_column(String(length=30))
+#     owner_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey(column="user_table.id", ondelete="CASCADE"))
+#     owner: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="tabs", passive_deletes=True)
 
-    notes: Mapped[list["NoteModel"]] = relationship(back_populates="tab", cascade="all, delete-orphan", passive_deletes=True)
-    vocabularies: Mapped[list["VocabularyModel"]] = relationship(back_populates="tab", cascade="all, delete-orphan", passive_deletes=True)
+#     notes: Mapped[list["NoteModel"]] = relationship(back_populates="tab", cascade="all, delete-orphan", passive_deletes=True)
+#     vocabularies: Mapped[list["VocabularyModel"]] = relationship(back_populates="tab", cascade="all, delete-orphan", passive_deletes=True)
 
-    def __repr__(self):
-        return f"TabModel: {self.name}"
-
-
-class NoteCollaboratorLink(BaseModel):
-    __tablename__ = "note_collaborator_link_table"
-    note_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("note_table.id", ondelete="CASCADE"), primary_key=True)
-    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("user_table.id", ondelete="CASCADE"), primary_key=True)
-
+#     def __repr__(self):
+#         return f"TabModel: {self.name}"
 
 class NoteModel(BaseModel):
     __tablename__ = "note_table"
@@ -51,11 +44,8 @@ class NoteModel(BaseModel):
     remind_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    tab_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("tab_table.id", ondelete="CASCADE"), nullable=True)
-    tab: Mapped["TabModel"] = relationship(argument="TabModel", back_populates="notes", passive_deletes=True)
     owner_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey(column="user_table.id", ondelete="CASCADE"), nullable=True)
     owner: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="notes", passive_deletes=True)
-    collaborators: Mapped[list["UserModel"]] = relationship(secondary="note_collaborator_link_table", back_populates="collaborative_notes", viewonly=False)
 
     def __repr__(self):
         return f"NoteModel: {self.title}"

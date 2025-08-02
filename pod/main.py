@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+import nltk
 import taskiq_fastapi
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +33,7 @@ async def app_lifespan(_app: FastAPI):
     my_logger.warning("🚀 Starting app_lifespan...")
 
     try:
+        nltk.download("punkt")
         initialize_firebase()
         await initialize_redis_indexes()
         await initialize_db()

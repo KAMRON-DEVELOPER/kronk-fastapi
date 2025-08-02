@@ -40,6 +40,8 @@ dependencies = [
     "google-cloud-translate",
     # "google-cloud-storage",
     "gcloud-aio-storage",
+    "nltk",
+    "spacy",
 ]
 
 [tool.pyright]
@@ -86,3 +88,4 @@ dev = [
     "python-json-logger",
     "types-redis",
 ]
+

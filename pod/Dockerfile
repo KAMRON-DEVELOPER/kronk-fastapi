@@ -23,6 +23,7 @@ COPY ./utility ./utility
 COPY ./static ./static
 
 RUN uv sync --locked
+RUN uv run -- spacy download en_core_web_sm
 
 # CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 # CMD ["uv", "run", "taskiq", "worker", "settings.my_taskiq:broker"]

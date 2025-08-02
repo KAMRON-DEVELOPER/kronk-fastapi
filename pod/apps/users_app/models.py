@@ -16,8 +16,8 @@ if TYPE_CHECKING:
                                     ChatParticipantModel, GroupMessageModel,
                                     GroupModel, GroupParticipantModel)
     from ..feeds_app.models import EngagementModel, FeedModel, ReportModel
-    from ..notes_app.models import NoteModel, TabModel
-    from ..vocabulary_app.models import VocabularyModel
+    from ..notes_app.models import NoteModel
+    from ..vocabulary_app.models import SentenceModel, VocabularyModel
 
 
 class Base(DeclarativeBase):
@@ -82,11 +82,10 @@ class UserModel(BaseModel):
     chat_participants: Mapped[list["ChatParticipantModel"]] = relationship(argument="ChatParticipantModel", back_populates="user", passive_deletes=True)
     chats: Mapped[list["ChatModel"]] = relationship(secondary="chat_participant_table", back_populates="users", viewonly=True)
     chat_messages: Mapped[list["ChatMessageModel"]] = relationship(argument="ChatMessageModel", back_populates="sender")
-    tabs: Mapped[list["TabModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
-    collaborative_notes: Mapped[list["NoteModel"]] = relationship(secondary="note_collaborator_link_table", back_populates="collaborators", viewonly=False)
+    # tabs: Mapped[list["TabModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
     notes: Mapped[list["NoteModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
-    collaborative_vocabularies: Mapped[list["VocabularyModel"]] = relationship(secondary="vocabulary_collaborator_link_table", back_populates="collaborators", viewonly=False)
-    vocabularies: Mapped[list["VocabularyModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    vocabularies: Mapped[list["VocabularyModel"]] = relationship(secondary="user_vocabulary_table", back_populates="users", cascade="all, delete")
+    sentences: Mapped[list["SentenceModel"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
 
     # @hybrid_property
     # def followers_count(self):

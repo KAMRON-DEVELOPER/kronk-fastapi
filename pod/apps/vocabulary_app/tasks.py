@@ -4,26 +4,29 @@ import os
 import shutil
 from itertools import islice
 from pathlib import Path
-from typing import Annotated
-from uuid import UUID
+from typing import Annotated, Optional
+from uuid import UUID, uuid4
 
 import aiofiles
+import aiohttp
 from gcloud.aio.storage import Storage
 from google.cloud import translate_v3
-from google.cloud import vision_v1
-from google.cloud.translate_v3.types.translation_service import TranslateTextResponse
-# from google.cloud.vision_v1.types import ImageSource, Image, Feature, AnnotateImageRequest, OutputConfig, GcsDestination, AsyncBatchAnnotateImagesRequest
+from google.cloud.vision_v1p4beta1 import ImageAnnotatorAsyncClient, Feature, ImageSource, Image, AnnotateImageRequest, GcsDestination, OutputConfig
 from google.oauth2 import service_account
+from nltk.tokenize import word_tokenize
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqDepends
 
-from apps.vocabulary_app.models import VocabularyModel
-from settings.my_config import get_settings
+from apps.vocabulary_app.models import SentenceModel, VocabularyModel, PhoneticModel, MeaningModel, DefinitionModel, UserVocabularyModel
+from apps.vocabulary_app.schemas import DictionaryIn
+from settings.my_config import get_settings, get_nlp
 from settings.my_database import get_session
 from settings.my_taskiq import broker
 from utility.my_logger import my_logger
 
 settings = get_settings()
+nlp = get_nlp()
 
 try:
     credentials = service_account.Credentials.from_service_account_file(filename=settings.GCP_CREDENTIALS_PATH)
@@ -31,10 +34,45 @@ except Exception as e:
     my_logger.exception(f"Exception while initializing google cloud platform credentials, e: {e}")
 
 
+def is_complete_sentence(sentence: str) -> bool:
+    """Checks if the sentence has a root verb, a strong indicator of completeness."""
+    doc = nlp(sentence)
+    has_root = any(token.dep_ == "ROOT" for token in doc)
+    has_subject = any(token.dep_ in ("nsubj", "nsubjpass") for token in doc)
+    return has_root and has_subject
+
+
 def chunked(iterable, size):
     it = iter(iterable)
     while chunk := list(islice(it, size)):
         yield chunk
+
+
+def chunked_by_characters(items: list[str], max_chars: int = 4500) -> list[list[str]]:
+    """Chunk list of strings by character count to respect API limits"""
+    chunks = []
+    current_chunk = []
+    current_length = 0
+
+    for item in items:
+        item_length = len(item) + 1
+        if current_length + item_length > max_chars and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = [item]
+            current_length = item_length
+        else:
+            current_chunk.append(item)
+            current_length += item_length
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def clean_token(word: str) -> str:
+    word = word.lower().strip().strip(".,!?")
+    return word
 
 
 async def upload(path: Path, blob_name: str):
@@ -44,31 +82,30 @@ async def upload(path: Path, blob_name: str):
     return blob_name
 
 
-@broker.task
-async def start_ocr_upload_pipeline(user_id: str, target_language_code: str, image_paths: list[str]):
+async def fetch_dictionary(word: str) -> Optional[DictionaryIn]:
+    url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word.lower()}"
     try:
-        blob_names = []
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=url) as response:
+                if response.status == 200:
+                    data: list[dict] = await response.json()
 
-        # Prepare (path, blob_name) pairs
-        files = [(path, f"{user_id}/{os.path.basename(path)}") for path in image_paths]
+                    # Use the first entry as the base
+                    merged_data = data[0]
 
-        # Upload in chunks of 5
-        for chunk in chunked(files, 5):
-            tasks = []
-            for path, blob_name in chunk:
-                tasks.append(upload(path=path, blob_name=blob_name))
-
-            # Run 5 uploads in parallel
-            results = await asyncio.gather(*tasks)
-            blob_names.extend(results)
-
-        output_prefix = f"ocr_output/{user_id}/"
-
-        my_logger.warning(f"blob_names: {blob_names}")
-
-        await create_vocabulary_task.kiq(owner_id=user_id, blob_names=blob_names, output_prefix=output_prefix, target_language_code=target_language_code)
+                    # If other entries exist, merge their meanings
+                    if len(data) > 1:
+                        for entry in data[1:]:
+                            entry_meaning = entry.get("meanings", [])
+                            if entry_meaning:
+                                merged_data["meanings"].extend(entry_meaning)
+                    return DictionaryIn.model_validate(merged_data)
+                elif response.status == 404:
+                    return None
+                else:
+                    raise Exception(f"Dictionary API error {response.status}")
     except Exception as ex:
-        my_logger.exception(f"start_ocr_upload_pipeline failed: {ex}")
+        my_logger.exception(f"fetch_dictionary_data failed: {ex}")
         raise ex
 
 
@@ -84,29 +121,12 @@ async def upload_to_gcs(file_bytes: bytes, blob_name: str):
         raise ex
 
 
-async def download_ocr_result(output_prefix: str) -> str:
-    try:
-        async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
-            objects = await client.list_objects(bucket=settings.GCS_BUCKET_NAME)
-            for obj in objects.get('items', []):
-                if obj['name'].startswith(output_prefix) and obj['name'].endswith('.json'):
-                    content = await client.download(settings.GCS_BUCKET_NAME, obj['name'])
-                    response = json.loads(content.decode())
-                    my_logger.warning(f"response: {response}")
-                    text = response['responses'][0]['fullTextAnnotation']['text']
-                    return text
-            raise Exception("OCR result not found")
-    except Exception as ex:
-        my_logger.exception(f"download ocr failed: {ex}")
-        raise ex
-
-
 async def delete_gcs_folder(bucket_name: str, folder_prefix: str):
     try:
         async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
             objects = await client.list_objects(bucket=bucket_name)
-            for obj in objects.get("items", []):
-                object_name = obj["name"]
+            for obj in objects.get("items", [{}]):
+                object_name = obj.get("name", "")
                 if object_name.startswith(folder_prefix):
                     await client.delete(bucket=bucket_name, object_name=object_name)
                     my_logger.warning(f"🗑️ Deleted: gs://{bucket_name}/{object_name}")
@@ -115,100 +135,221 @@ async def delete_gcs_folder(bucket_name: str, folder_prefix: str):
         raise ex
 
 
-async def extract_text_from_images(blob_names: list[str], output_uri: str):
+async def download_ocr_result(output_prefix: str) -> list[str]:
     try:
-        client = vision_v1.ImageAnnotatorAsyncClient(credentials=credentials)
-
-        features = [{"type_": vision_v1.Feature.Type.TEXT_DETECTION}]
-        requests = [
-            {"image": {"source": {"image_uri": f"gs://{settings.GCS_BUCKET_NAME}/{blob_name}"}}, "features": features}
-            for blob_name in blob_names
-        ]
-        gcs_destination = {"uri": output_uri}
-
-        batch_size = 10
-        output_config = {"gcs_destination": gcs_destination, "batch_size": batch_size}
-
-        operation = client.async_batch_annotate_images(requests=requests, output_config=output_config)
-
-        output_config = {"gcs_destination": {"uri": output_uri}, "batch_size": 100}
-
-        operation = await client.async_batch_annotate_images({"requests": requests, "output_config": output_config})
-
-        my_logger.warning("⏳ Waiting for OCR operation to complete...")
-        response = await operation.result(timeout=300)
-        gcs_output_uri = response.output_config.gcs_destination.uri
-        my_logger.warning(f"Output written to GCS with prefix: {gcs_output_uri}")
-        await delete_gcs_folder(settings.GCS_BUCKET_NAME, output_uri)
-        my_logger.warning(f"✅ OCR complete, results saved to: {output_uri}")
+        sentences: list[str] = []
+        async with Storage(service_file=settings.GCP_CREDENTIALS_PATH) as client:
+            objects = await client.list_objects(bucket=settings.GCS_BUCKET_NAME)
+            for obj in objects.get("items", [{}]):
+                my_logger.warning(f"obj: {obj}")
+                object_name = obj.get("name", "")
+                if object_name.startswith(output_prefix) and object_name.endswith(".json"):
+                    content: bytes = await client.download(bucket=settings.GCS_BUCKET_NAME, object_name=object_name)
+                    data: dict = json.loads(content.decode())
+                    my_logger.warning(f"data: {data}")
+                    for response in data.get("responses", [{}]):
+                        if "fullTextAnnotation" in response:
+                            text = response.get("fullTextAnnotation", {}).get("text", "").strip()
+                            if is_complete_sentence(text):
+                                sentences.append(text)
+            return sentences
     except Exception as ex:
-        my_logger.exception(f"extract_text_from_images failed: {ex}")
+        my_logger.exception(f"download ocr failed: {ex}")
         raise ex
 
 
-async def translate_text_async(contents: list[str], target_language_code: str, project_id: str) -> str:
+async def run_text_extraction(blob_names: list[str], output_uri: str):
+    try:
+        client = ImageAnnotatorAsyncClient(credentials=credentials)
+
+        requests = [
+            AnnotateImageRequest({
+                "image": Image({
+                    "source": ImageSource({
+                        "image_uri": f"gs://{settings.GCS_BUCKET_NAME}/{blob_name}",
+                    }),
+                }),
+                "features": [Feature({"type_": Feature.Type.DOCUMENT_TEXT_DETECTION})]
+            })
+            for blob_name in blob_names
+        ]
+        output_config = OutputConfig({"gcs_destination": GcsDestination({"uri": output_uri}), "batch_size": 10})
+        operation = await client.async_batch_annotate_images(requests=requests, output_config=output_config)
+        response = await operation.result()
+
+        gcs_output_uri = response.output_config.gcs_destination.uri
+        my_logger.warning(f"Output written to GCS with prefix: {gcs_output_uri}")
+        my_logger.warning(f"✅ OCR complete, results saved to: {output_uri}")
+
+    except Exception as ex:
+        my_logger.exception(f"run_text_extraction failed: {ex}")
+        raise ex
+
+
+async def translate_text_async(contents: list[str], target_language_code: str) -> list[str]:
     try:
         client = translate_v3.TranslationServiceAsyncClient(credentials=credentials)
-        parent = f"projects/{project_id}/locations/global"
-        response: TranslateTextResponse = await client.translate_text(parent=parent, contents=contents, mime_type="text/plain", target_language_code=target_language_code)
-        return response.translations[0].translated_text
+        parent = f"projects/{settings.GCP_PROJECT_ID}/locations/global"
+        response = await client.translate_text(parent=parent, contents=contents, mime_type="text/plain", target_language_code=target_language_code)
+        my_logger.warning(f"response: {response}")
+
+        # Return a list of all translated texts
+        return [t.translated_text for t in response.translations]
     except Exception as ex:
         my_logger.exception(f"translate_text_async failed: {ex}")
         raise ex
 
 
-@broker.task(task_name="create_vocabulary_task")
-async def create_vocabulary_task(owner_id: str, blob_names: list[str], output_prefix: str, target_language_code: str,
-                                 session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
+@broker.task
+async def start_ocr_upload_pipeline(user_id: str, target_language_code: str, image_paths: list[str]):
     try:
+        blob_names = []
+
+        # Prepare (path, blob_name) pairs for uploading from local to gcs
+        files = [(path, f"{user_id}/{os.path.basename(path)}") for path in image_paths]
+
+        # Upload in chunks of 5
+        for chunk in chunked(files, 5):
+            tasks = []
+            tasks.extend([upload(path=path, blob_name=blob_name) for path, blob_name in chunk])
+
+            # Run 5 uploads in parallel
+            results = await asyncio.gather(*tasks)
+            blob_names.extend(results)
+
+        output_prefix = f"ocr_output/{user_id}/"
+
+        my_logger.warning(f"blob_names: {blob_names}")
+
         gcs_output_uri = f"gs://{settings.GCS_BUCKET_NAME}/{output_prefix}"
 
-        # 1. Run async batch OCR
-        chunks = [blob_names[i:i + 1000] for i in range(0, len(blob_names), 1000)]
-        for chunk in chunks:
-            await extract_text_from_images(blob_names=chunk, output_uri=gcs_output_uri)
+        # Run async batch OCR, because google vision limit is 2000 images
+        for chunk in chunked(blob_names, 1000):
+            await run_text_extraction(blob_names=chunk, output_uri=gcs_output_uri)
 
-        # 2. Download extracted text
-        extracted_text = await download_ocr_result(output_prefix=output_prefix)
+        await create_vocabulary_task.kiq(owner_id=user_id, output_prefix=output_prefix, target_language_code=target_language_code)
+    except Exception as ex:
+        my_logger.exception(f"start_ocr_upload_pipeline failed: {ex}")
+        raise ex
 
-        # 3. Translate
-        translated_text = await translate_text_async(contents=[extracted_text], target_language_code=target_language_code, project_id=settings.GCP_PROJECT_ID)
-        my_logger.warning(f"translated_text: {translated_text}")
 
-        # 4. Save to DB
-        new_vocabulary = VocabularyModel(word='', translation='', definiton='', part_of_speech='', owner_id=UUID(hex=owner_id))
-        session.add(instance=new_vocabulary)
-        await session.commit()
+@broker.task(task_name="create_vocabulary_task")
+async def create_vocabulary_task(owner_id: str, output_prefix: str, target_language_code: str,
+                                 session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
+    try:
+        oid = UUID(hex=owner_id)
 
-        # 5. Cleanup
-        await delete_gcs_folder(settings.GCS_BUCKET_NAME, output_prefix)
-        for blob in blob_names:
-            await delete_gcs_folder(settings.GCS_BUCKET_NAME, blob.rsplit("/", 1)[0])
+        # Get original sentences from OCR results
+        original_sentences = await download_ocr_result(output_prefix=output_prefix)  # ["it is totally fine", "what did you expected?", "that was awesome!"]
+        translated_sentences = []  # ["bu butunlay yaxshi", "nima kutgan edingiz?", "bu ajoyib edi"]
 
-        shutil.rmtree(settings.TEMP_IMAGES_FOLDER_PATH / owner_id, ignore_errors=True)
+        # Translate sentences in batches
+        for chunk in chunked_by_characters(items=original_sentences, max_chars=4500):
+            translated = await translate_text_async(contents=chunk, target_language_code=target_language_code)
+            translated_sentences.extend(translated)
 
-        return {"ok": True}
+        # Creating sentence models
+        sentence_ids_with_tokens: list[tuple[UUID, list[str]]] = []
+        sentence_ids_with_sentence: dict[UUID, SentenceModel] = {}
+
+        for original_text, translated_text in zip(original_sentences, translated_sentences):
+            sentence_id = uuid4()
+
+            tokens = [clean_token(token) for token in word_tokenize(original_text) if token.isalpha() and clean_token(token) not in BASIC_WORDS]
+            sentence_ids_with_tokens.append((sentence_id, tokens))
+
+            sentence = SentenceModel(id=sentence_id, sentence=original_text, translation=translated_text, target_language=target_language_code, owner_id=oid)
+            sentence_ids_with_sentence[sentence_id] = sentence
+            session.add(sentence)
+
+            # Step 4: Determine all unique new words
+            all_unique_words = set()
+            for _, words in sentence_ids_with_tokens:
+                all_unique_words.update(words)
+
+            # Step 5: Fetch existing vocabulary words
+            existing_vocab_query = await session.execute(
+                select(VocabularyModel.word).where(VocabularyModel.word.in_(all_unique_words), VocabularyModel.target_language == target_language_code))
+            my_logger.warning(f"existing_vocab_query: {existing_vocab_query}")
+            existing_words = {row[0] for row in existing_vocab_query.all()}
+            new_words = all_unique_words - existing_words
+
+            # Step 6: Translate new words
+            translated_map: dict[str, str] = {}
+            for chunk in chunked_by_characters(items=list(new_words), max_chars=4500):
+                translated = await translate_text_async(contents=chunk, target_language_code=target_language_code)
+                for word, translated_word in zip(chunk, translated):
+                    translated_map[word] = translated_word
+
+            # Step 7: Fetch dictionary data
+            dictionary_map: dict[str, DictionaryIn] = {}
+            dictionary_tasks = [fetch_dictionary(word) for word in new_words]
+            dictionary_results: list[DictionaryIn] = await asyncio.gather(*dictionary_tasks)
+            for word, result in zip(new_words, dictionary_results):
+                if result:
+                    dictionary_map[word] = result
+
+            # Step 7.1: Bulk fetch existing vocabularies
+            existing_vocabulary_query = await session.execute(
+                select(VocabularyModel).where(VocabularyModel.word.in_(all_unique_words), VocabularyModel.target_language == target_language_code))
+            existing_vocab_map: dict[str, VocabularyModel] = {vocabulary.word: vocabulary for vocabulary in existing_vocabulary_query.scalars().all()}
+
+            # Step 7.2: Create and collect new vocabulary entries
+            new_vocab_map: dict[str, VocabularyModel] = {}
+            for word in all_unique_words:
+                if word not in existing_vocab_map:
+                    vocabulary = VocabularyModel(word=word, translation=translated_map.get(word, ""), target_language=target_language_code)
+
+                    # Attach dictionary data
+                    dict_data = dictionary_map.get(word)
+                    if dict_data:
+                        for p in dict_data.phonetics:
+                            vocabulary.phonetics.append(PhoneticModel(text=p.text, audio=p.audio))
+                        for m in dict_data.meanings:
+                            meaning = MeaningModel(part_of_speech=m.part_of_speech)
+                            for d in m.definitions:
+                                meaning.definitions.append(DefinitionModel(definition=d.definition, example=d.example))
+                            vocabulary.meanings.append(meaning)
+
+                    session.add(vocabulary)
+                    new_vocab_map[word] = vocabulary
+
+            # 3. After flush, build user ↔ vocab connections
+            await session.flush()
+
+            # Combine both vocab maps
+            all_vocab_map: dict[str, VocabularyModel] = {**existing_vocab_map, **new_vocab_map}
+
+            # 4. Create UserVocabularyModel entries
+            for word in all_unique_words:
+                vocab = all_vocab_map[word]
+                # Ensure user ↔ vocab relationship exists
+                await session.merge(UserVocabularyModel(user_id=oid, vocabulary_id=vocab.id))
+
+            # 5. Link vocabularies to sentences
+            for sentence_id, words in sentence_ids_with_tokens:
+                sentence_model = sentence_ids_with_sentence.get(sentence_id)
+                for word in words:
+                    vocab = all_vocab_map.get(word)
+                    if vocab and vocab not in sentence_model.words:
+                        sentence_model.words.append(vocab)  # type: ignore[attr-defined]
+
+            # Step 9: Save all changes
+            await session.commit()
+
+            # Step 10: Cleanup GCS folder & temp folder
+            await delete_gcs_folder(settings.GCS_BUCKET_NAME, output_prefix)
+            shutil.rmtree(settings.TEMP_IMAGES_FOLDER_PATH / owner_id, ignore_errors=True)
+
+            return {"ok": True}
     except Exception as ex:
         my_logger.exception(f"create_vocabulary_task failed: {ex}")
         await session.rollback()
         raise ex
 
-# requests = [
-#     AnnotateImageRequest(
-#         image=Image(source=ImageSource(image_uri=f"gs://{settings.GCS_BUCKET_NAME}/{blob_name}")),
-#         features=[Feature(type_=Feature.Type.DOCUMENT_TEXT_DETECTION)]
-#     )
-#     for blob_name in blob_names
-# ]
 
-# output_config = OutputConfig(
-#     gcs_destination=GcsDestination(uri=output_uri),
-#     batch_size=1
-# )
-
-# operation = await client.async_batch_annotate_images(
-#     AsyncBatchAnnotateImagesRequest(
-#         requests=[r.pb() for r in requests],
-#         output_config=output_config.pb()
-#     )
-# )
+BASIC_WORDS = {
+    "the", "a", "an", "i", "you", "he", "she", "it", "we", "they", "is", "are", "was", "were", "am", "be", "been", "being", "in", "on", "at",
+    "of", "for", "and", "or", "but", "so", "to", "do", "did", "does", "have", "has", "had", "with", "as", "not", "if", "also", "from", "by", "will",
+    "should", "shall", "you're", "i'm", "it's", "ok", "thank", "thanks" "please", "sorry", "excuse", "hello", "hi", "bye", "goodbye", "welcome",
+}
