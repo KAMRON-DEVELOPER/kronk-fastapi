@@ -233,6 +233,9 @@ echo "f94b638b565c503932b657534d1f044b7f1c8acfb76170e80851704423a49186" | sudo t
 
 # EMAIL
 echo "wSsVR61z+0b3Bq9+mzWtJOc+yAxSUgv1HEx93Qaoun79Sv7KosduxECdBw/1HPBLGDNpQWAU9bN/yx0C0GUN2dh8mVAGDSiF9mqRe1U4J3x17qnvhDzIWWtYlxGNLIkLzwlumWdiEssi+g==" |sudo tee /run/secrets/EMAIL_SERVICE_API_KEY
+
+# LINGVANEX
+echo "a_dUeI93xqbQyOI3bo5FkOzaVKI2VV1BL75CVl5XVkW0zHE4dsC5ey2enQugDk3I8anVJkpzud8FziKuCZ" | sudo tee /run/secrets/LINGVANEX_API_KEY
 ```
 
 ---
