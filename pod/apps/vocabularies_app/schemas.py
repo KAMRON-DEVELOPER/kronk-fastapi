@@ -82,9 +82,12 @@ class VocabularyOut(BaseModel):
 
 class SentenceOut(BaseModel):
     id: UUID
+    created_at: datetime
+    updated_at: datetime
     sentence: str
     translation: str
     target_language: str
+    owner_id: UUID
     words: list[VocabularyOut]
 
     class Config:
@@ -94,9 +97,9 @@ class SentenceOut(BaseModel):
 
 class VocabularyResponse(BaseModel):
     vocabularies: list[VocabularyOut]
-    end: int
+    total: int
 
 
 class SentenceResponse(BaseModel):
     sentences: list[SentenceOut]
-    end: int
+    total: int

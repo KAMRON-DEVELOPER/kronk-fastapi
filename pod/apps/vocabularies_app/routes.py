@@ -4,7 +4,7 @@ from uuid import UUID
 import aiofiles
 from fastapi import APIRouter, UploadFile
 from fastapi.exceptions import HTTPException
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 
 from apps.users_app.schemas import ResultSchema
@@ -43,16 +43,24 @@ async def create_vocabulary(jwt: strictJwtDependency, images: list[UploadFile], 
         return {"ok": False}
 
 
+# routes.py
 @vocabularies_router.get(path="", response_model=VocabularyResponse, status_code=200)
-async def get_vocabulary(jwt: strictJwtDependency, session: DBSession, start: int = 0, end: int = 20):
+async def get_vocabulary(jwt: strictJwtDependency, session: DBSession, offset: int = 0, limit: int = 20):
     try:
-        stmt = (
+        base_stmt = (
             select(VocabularyModel)
             .join(UserVocabularyModel, UserVocabularyModel.vocabulary_id == VocabularyModel.id)
             .where(UserVocabularyModel.user_id == jwt.user_id)
+        )
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = await session.scalar(count_stmt)
+
+        stmt = (
+            base_stmt
             .order_by(VocabularyModel.created_at.asc())
-            .offset(start)
-            .limit(end - start + 1)
+            .offset(offset)
+            .limit(limit)
             .options(
                 selectinload(VocabularyModel.phonetics),
                 selectinload(VocabularyModel.meanings),
@@ -60,11 +68,10 @@ async def get_vocabulary(jwt: strictJwtDependency, session: DBSession, start: in
                 selectinload(VocabularyModel.sentences)
             )
         )
-
         results = await session.scalars(stmt)
         vocabularies: list[VocabularyModel] = results.unique().all()
 
-        return [VocabularyOut.model_validate(obj=v) for v in vocabularies]
+        return VocabularyResponse(vocabularies=[VocabularyOut.model_validate(v) for v in vocabularies], total=total)
     except Exception as e:
         my_logger.exception(f"Exception while fetching vocabulary list, e: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,25 +89,27 @@ async def delete_vocabulary(jwt: strictJwtDependency, vocabulary_ids: list[UUID]
 
 
 @vocabularies_router.get(path="/sentences", response_model=SentenceResponse, status_code=200)
-async def get_sentences(jwt: strictJwtDependency, session: DBSession, start: int = 0, end: int = 20):
+async def get_sentences(jwt: strictJwtDependency, session: DBSession, offset: int = 0, limit: int = 20):
     try:
+        base_stmt = (select(SentenceModel).where(SentenceModel.owner_id == jwt.user_id))
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = await session.scalar(count_stmt)
+
         stmt = (
-            select(SentenceModel)
-            .where(SentenceModel.owner_id == jwt.user_id)
+            base_stmt
             .order_by(SentenceModel.created_at.asc())
-            .offset(start)
-            .limit(end - start + 1)
-            .options(selectinload(SentenceModel.words), selectinload(SentenceModel.words).selectinload(VocabularyModel.phonetics),
-                     selectinload(SentenceModel.words).selectinload(VocabularyModel.meanings).selectinload(MeaningModel.definitions))
+            .offset(offset)
+            .limit(limit)
+            .options(
+                selectinload(SentenceModel.words), selectinload(SentenceModel.words).selectinload(VocabularyModel.phonetics),
+                selectinload(SentenceModel.words).selectinload(VocabularyModel.meanings).selectinload(MeaningModel.definitions),
+            )
         )
         results = await session.scalars(stmt)
-        sentences: list[SentenceModel] = results.all()
+        sentences: list[SentenceModel] = results.unique().all()
 
-        if not sentences:
-            return []
-
-        if sentences:
-            return [SentenceOut.model_validate(obj=sentence) for sentence in sentences]
+        return SentenceResponse(sentences=[SentenceOut.model_validate(sentence) for sentence in sentences], total=total)
     except Exception as e:
         my_logger.exception(f"Exception while creating feed, e: {e}")
         raise HTTPException(status_code=500, detail=str(e))
