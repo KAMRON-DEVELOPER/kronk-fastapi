@@ -22,7 +22,7 @@ from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
 from settings.my_minio import initialize_minio
-from settings.my_redis import initialize_redis_indexes
+from settings.my_redis import initialize_redis_indexes, cache_manager
 from settings.my_taskiq import broker
 from utility.my_logger import my_logger
 
@@ -55,11 +55,9 @@ async def app_lifespan(_app: FastAPI):
 
 app: FastAPI = FastAPI(lifespan=app_lifespan)
 instrumentator = Instrumentator().instrument(app)
-
 taskiq_fastapi.init(broker=broker, app_or_path=app)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 templates = Jinja2Templates(directory="static/templates")
 
 
@@ -91,6 +89,20 @@ async def terms_of_service(request: Request):
 @app.get("/safety", response_class=HTMLResponse, include_in_schema=False)
 async def terms_of_service(request: Request):
     return templates.TemplateResponse("safety.html", {"request": request})
+
+
+@app.get("/show-support-buttons")
+async def get_show_support_buttons():
+    if not await cache_manager.cache_redis.exists("show_support_buttons"):
+        await cache_manager.cache_redis.set(name="show_support_buttons", value=0)
+    return {"show_support_buttons": await cache_manager.cache_redis.get(name="show_support_buttons") == "1"}
+
+
+@app.post("/show-support-buttons")
+async def set_show_support_buttons():
+    value = "0" if await cache_manager.cache_redis.get(name="show_support_buttons") == "1" else "1"
+    await cache_manager.cache_redis.set(name="show_support_buttons", value=value)
+    return {"show_support_buttons": value == "1"}
 
 
 # HTTP Routes
