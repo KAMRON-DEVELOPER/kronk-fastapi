@@ -82,13 +82,18 @@ async def terms_of_service(request: Request):
 
 
 @app.get("/account-deletion-info", response_class=HTMLResponse, include_in_schema=False)
-async def terms_of_service(request: Request):
+async def account_deletion_info(request: Request):
     return templates.TemplateResponse("account_deletion_info.html", {"request": request})
 
 
 @app.get("/safety", response_class=HTMLResponse, include_in_schema=False)
-async def terms_of_service(request: Request):
+async def safety(request: Request):
     return templates.TemplateResponse("safety.html", {"request": request})
+
+
+@app.get("/support", response_class=HTMLResponse, include_in_schema=False)
+async def support_page(request: Request):
+    return templates.TemplateResponse("support.html", {"request": request})
 
 
 @app.get("/show-support-buttons")
