@@ -42,6 +42,7 @@ dependencies = [
     "gcloud-aio-storage",
     "nltk",
     "spacy",
+    "pip"
 ]
 
 [tool.pyright]
