@@ -2,78 +2,78 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Account Deletion Information</title>
-  <style>
-    :root {
-      --bg: #0c0f15;
-      --fg: #aed7f5;
-      --surface: #171b24;
-      --highlight: #1a2332;
-    }
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Account Deletion Information</title>
+    <style>
+        :root {
+          --bg: #0c0f15;
+          --fg: #aed7f5;
+          --surface: #171b24;
+          --highlight: #1a2332;
+        }
 
-    body {
-      background-color: var(--bg);
-      color: var(--fg);
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      padding: 2rem;
-      line-height: 1.6;
-    }
+        body {
+          background-color: var(--bg);
+          color: var(--fg);
+          font-family: system-ui, sans-serif;
+          margin: 0;
+          padding: 2rem;
+          line-height: 1.6;
+        }
 
-    h1,
-    h2 {
-      color: var(--fg);
-    }
+        h1,
+        h2 {
+          color: var(--fg);
+        }
 
-    a {
-      color: #66baff;
-      text-decoration: underline;
-    }
+        a {
+          color: #66baff;
+          text-decoration: underline;
+        }
 
-    code {
-      background-color: var(--highlight);
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      font-family: monospace;
-    }
+        code {
+          background-color: var(--highlight);
+          padding: 0.2rem 0.4rem;
+          border-radius: 4px;
+          font-family: monospace;
+        }
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background-color: var(--surface);
-      padding: 2rem;
-      border-radius: 12px;
-    }
+        .container {
+          max-width: 800px;
+          margin: 0 auto;
+          background-color: var(--surface);
+          padding: 2rem;
+          border-radius: 12px;
+        }
 
-    @media (max-width: 600px) {
-      body {
-        padding: 1rem;
-      }
+        @media (max-width: 600px) {
+          body {
+            padding: 1rem;
+          }
 
-      .container {
-        padding: 1.5rem;
-      }
-    }
-  </style>
+          .container {
+            padding: 1.5rem;
+          }
+        }
+    </style>
 </head>
 
 <body>
-  <div class="container">
+<div class="container">
     <h1>Account Deletion Information</h1>
 
     <p>If you decide to delete your account, all associated data will be permanently removed. This includes your
-      profile, feeds, likes, bookmarks, messages, and any other personal
-      content.</p>
+        profile, feeds, likes, bookmarks, messages, and any other personal
+        content.</p>
 
     <h2>Deleting via the App</h2>
     <p>
-      If you're using the mobile app, you can delete your account by:
+        If you're using the mobile app, you can delete your account by:
     <ul>
-      <li>Opening the <strong>Settings</strong> screen</li>
-      <li>Scrolling to the bottom</li>
-      <li>Tapping the red <strong>Delete Account</strong> button</li>
+        <li>Opening the <strong>Settings</strong> screen</li>
+        <li>Scrolling to the bottom</li>
+        <li>Tapping the red <strong>Delete Account</strong> button</li>
     </ul>
     <p>
 
@@ -81,15 +81,16 @@
     <p>You can also delete your account using our API if you prefer not to use the app:</p>
 
     <ol>
-      <li>Send a POST request to <code>https://api.kronk.uz/api/v1/users/login</code> with your username and password in
-        JSON format.</li>
-      <li>The response will contain a <code>tokens</code> object with your <code>access</code> token.</li>
-      <li>Use the access token in the <code>Authorization</code> header as a Bearer token and send a DELETE request to:
-      </li>
+        <li>Send a POST request to <code>https://api.kronk.uz/api/v1/users/login</code> with your username and password in
+            JSON format.
+        </li>
+        <li>The response will contain a <code>tokens</code> object with your <code>access</code> token.</li>
+        <li>Use the access token in the <code>Authorization</code> header as a Bearer token and send a DELETE request to:
+        </li>
     </ol>
 
     <p>
-      <code>https://api.kronk.uz/api/v1/users/profile/delete</code>
+        <code>https://api.kronk.uz/api/v1/users/profile/delete</code>
     </p>
 
     <p>Example header:</p>
@@ -97,18 +98,18 @@
 
     <h2>Need Help?</h2>
     <p>If you need help or have any questions, feel free to reach out via our <a href="https://t.me/kronk_uz"
-        target="_blank">Telegram channel</a>.</p>
-    </div>
-  <hr style="margin-top: 3rem; border-color: #2a2f3a;" />
-  <footer>
+                                                                                 target="_blank">Telegram channel</a>.</p>
+</div>
+<hr style="margin-top: 3rem; border-color: #2a2f3a;"/>
+<footer>
     <p style="text-align: center; font-size: 0.9rem; margin-top: 2rem;">
-      <a href="/terms" style="margin: 0 1rem;">Terms of Service</a> |
-      <a href="/privacy" style="margin: 0 1rem;">Privacy Policy</a> |
-      <a href="/support" style="margin: 0 1rem;">Support</a> |
-      <a href="/safety" style="margin: 0 1rem;">Safety</a> |
-      <a href="/account-deletion-info" style="margin: 0 1rem;">Account Deletion</a>
+        <a href="/terms" style="margin: 0 1rem;">Terms of Service</a> |
+        <a href="/privacy" style="margin: 0 1rem;">Privacy Policy</a> |
+        <a href="/safety" style="margin: 0 1rem;">Safety</a> |
+        <a href="/account-deletion-info" style="margin: 0 1rem;">Account Deletion</a> |
+        <a href="/support" style="margin: 0 1rem;">Support</a>
     </p>
-  </footer>
+</footer>
 </body>
 
 </html>
