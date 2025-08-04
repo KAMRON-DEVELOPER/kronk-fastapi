@@ -20,7 +20,7 @@ from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     VerifySchema)
 from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
                                   notify_settings_stats, send_email_task)
-from services.firebase_service import validate_firebase_token
+from services.firebase_service import verify_id_token
 from settings.my_database import DBSession
 from settings.my_dependency import (create_jwt_token, headerTokenDependency,
                                     jwtDependency, strictJwtDependency)
@@ -172,12 +172,14 @@ async def forgot_password_route(schema: ResetPasswordSchema, htd: headerTokenDep
     return await cache_profile(user=user)
 
 
-@users_router.post(path="/auth/social/google", response_model=ProfileTokenSchema, status_code=200)
-async def google_auth_route(htd: headerTokenDependency, session: DBSession):
-    if not htd.firebase_id_token:
+@users_router.post(path="/auth/social", response_model=ProfileTokenSchema, status_code=200)
+async def social_auth(session: DBSession, id_token: Optional[str] = None, authorization_code: Optional[str] = None):
+    my_logger.debug(f"id_token: {id_token}")
+    my_logger.debug(f"authorization_code: {authorization_code}")
+    if not id_token:
         raise HeaderTokenException("Firebase ID token is missing in the headers.")
 
-    firebase_user: UserRecord = await validate_firebase_token(htd.firebase_id_token)
+    firebase_user: UserRecord = await verify_id_token(id_token)
 
     stmt = select(UserModel).where(UserModel.email == firebase_user.email)
     result = await session.execute(stmt)
