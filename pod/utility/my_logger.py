@@ -3,6 +3,10 @@ from pathlib import Path
 
 from loguru import logger as my_logger
 
+from settings.my_config import get_settings
+
+settings = get_settings()
+
 
 def custom_log_sink(message):
     """Custom Loguru Sink with clickable file paths."""
@@ -42,4 +46,4 @@ def custom_log_sink(message):
 
 
 my_logger.remove()
-my_logger.add(custom_log_sink, level="TRACE")
+my_logger.add(custom_log_sink, level="TRACE" if settings.DEBUG else "WARNING")
