@@ -108,7 +108,7 @@ class UserModel(BaseModel):
 
 
 class BlockModel(BaseModel):
-    __tablename__ = "user_table"
+    __tablename__ = "block_table"
 
     blocker_id: Mapped[UUID] = mapped_column(ForeignKey(column="user_table.id", ondelete="CASCADE"))
     blocked_id: Mapped[UUID] = mapped_column(ForeignKey(column="user_table.id", ondelete="CASCADE"))
