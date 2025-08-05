@@ -19,7 +19,7 @@ from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     TokenSchema, UserSearchResponseSchema,
                                     VerifySchema)
 from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
-                                  notify_settings_stats, send_email_task)
+                                  notify_settings_stats, send_email_task, block_user_task)
 from services.firebase_service import verify_id_token
 from settings.my_database import DBSession
 from settings.my_dependency import (create_jwt_token, headerTokenDependency,
@@ -376,14 +376,20 @@ async def delete_profile_route(jwt: strictJwtDependency, session: DBSession):
 
 @users_router.post(path="/follow", response_model=ResultSchema, status_code=200)
 async def follow_route(jwt: strictJwtDependency, following_id: UUID):
-    if jwt.user_id == following_id:
-        raise ValidationException(detail="Are you piece of human shit! Cannot follow yourself")
+    try:
+        if jwt.user_id == following_id:
+            raise ValidationException(detail="Are you piece of human shit! Cannot follow yourself")
 
-    await cache_manager.add_follower(user_id=jwt.user_id.hex, following_id=following_id.hex)
+        await cache_manager.add_follower(user_id=jwt.user_id.hex, following_id=following_id.hex)
 
-    await add_follow_to_db.kiq(user_id=jwt.user_id, following_id=following_id)
+        await add_follow_to_db.kiq(user_id=jwt.user_id, following_id=following_id)
 
-    return {"ok": True}
+        return {"ok": True}
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=str(ve))
+    except Exception as e:
+        my_logger.exception(f"Exception while following, e: {e}")
+        raise HTTPException(status_code=500, detail="Server error occurred")
 
 
 @users_router.post(path="/unfollow", response_model=ResultSchema, status_code=200)
@@ -405,6 +411,18 @@ async def get_followers_route(jwt: strictJwtDependency):
 @users_router.get(path="/followings", status_code=200)
 async def get_followings_route(jwt: strictJwtDependency):
     return await cache_manager.get_following(user_id=jwt.user_id.hex)
+
+
+@users_router.get(path="/block-user", response_model=ResultSchema, status_code=200)
+async def block_user(jwt: strictJwtDependency, blocked_id: UUID, symmetrical: bool = False):
+    try:
+        cache_manager.block_user(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex, symmetrical=symmetrical)
+        await block_user_task.kiq(blocker_id=jwt.user_id, blocked_id=blocked_id, symmetrical=symmetrical)
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=str(ve))
+    except Exception as e:
+        my_logger.exception(f"Exception while blocking the user, e: {e}")
+        raise HTTPException(status_code=500, detail="We couldn't block the user.")
 
 
 @users_router.post(path="/auth/access", response_model=TokenSchema, status_code=200)

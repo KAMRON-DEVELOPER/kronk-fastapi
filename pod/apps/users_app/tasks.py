@@ -5,7 +5,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqDepends
 
-from apps.users_app.models import FollowModel, UserModel
+from apps.users_app.models import FollowModel, UserModel, BlockModel
 from services.zepto_service import ZeptoMail
 from settings.my_database import get_session
 from settings.my_exceptions import NotFoundException
@@ -53,12 +53,6 @@ async def add_follow_to_db(user_id: UUID, following_id: UUID, session: Annotated
 
     stmt = exists().where(FollowModel.follower_id == user_id, FollowModel.following_id == following_id).select()
     already_followed = await session.scalar(stmt)
-    # already_followed1 = await session.execute(stmt) worked
-    # my_logger.debug(f"already_followed: {already_followed}") worked
-    # my_logger.debug(f"already_followed1.scalar(): {already_followed1.scalar()}") worked
-    # my_logger.debug(f"already_followed1.scalar_one_or_none(): {already_followed1.scalar_one_or_none()}") fail
-    # my_logger.debug(f"already_followed1.all(): {already_followed1.all()}") fail
-    # my_logger.debug(f"already_followed1.first(): {already_followed1.first()}") fail
     if already_followed:
         my_logger.error("Already following this user")
         return {"ok": True}
@@ -86,6 +80,30 @@ async def delete_follow_from_db(
         return {"ok": True}
 
     await session.delete(follow)
+    await session.commit()
+
+    return {"ok": True}
+
+
+@broker.task(task_name="create_block")
+async def block_user_task(blocker_id: UUID, blocked_id: UUID, symmetrical: bool, session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
+    stmt1 = select(select(BlockModel.id).where(BlockModel.blocker_id == blocker_id, BlockModel.blocked_id == blocked_id).exists())
+    blocked_by_target = await session.scalar(stmt1)
+
+    stmt2 = select(select(BlockModel.id).where(BlockModel.blocker_id == blocked_id, BlockModel.blocked_id == blocker_id).exists())
+    blocks_target = await session.scalar(stmt2)
+
+    if blocked_by_target:
+        raise ValueError("You are already blocked by this user.")
+    if blocks_target:
+        raise ValueError("You already blocked this user.")
+
+    instances = [BlockModel(blocker_id=blocker_id, blocked_id=blocked_id)]
+
+    if symmetrical:
+        instances.append(BlockModel(blocker_id=blocked_id, blocked_id=blocker_id))
+
+    session.add_all(instances)
     await session.commit()
 
     return {"ok": True}

@@ -66,12 +66,12 @@ class UserModel(BaseModel):
     followers_count: Mapped[int] = column_property(select(func.count(FollowModel.id)).where(text("following_id = id")).correlate_except(FollowModel).scalar_subquery())
     followings_count: Mapped[int] = column_property(select(func.count(FollowModel.id)).where(text("follower_id = id")).correlate_except(FollowModel).scalar_subquery())
 
-    followers: Mapped[list["FollowModel"]] = relationship(
-        argument="FollowModel", back_populates="following", foreign_keys="[FollowModel.following_id]", cascade="all, delete-orphan"
-    )
-    followings: Mapped[list["FollowModel"]] = relationship(
-        argument="FollowModel", back_populates="follower", foreign_keys="[FollowModel.follower_id]", cascade="all, delete-orphan"
-    )
+    followers: Mapped[list["FollowModel"]] = relationship(argument="FollowModel", back_populates="following", foreign_keys="[FollowModel.following_id]",
+                                                          cascade="all, delete-orphan")
+    followings: Mapped[list["FollowModel"]] = relationship(argument="FollowModel", back_populates="follower", foreign_keys="[FollowModel.follower_id]",
+                                                           cascade="all, delete-orphan")
+    blocked_users: Mapped[list["BlockModel"]] = relationship("BlockModel", back_populates="blocker", foreign_keys="[BlockModel.blocker_id]")
+    blockers: Mapped[list["BlockModel"]] = relationship("BlockModel", back_populates="blocked", foreign_keys="[BlockModel.blocked_id]")
     feeds: Mapped[list["FeedModel"]] = relationship(argument="FeedModel", back_populates="author", passive_deletes=True)
     engagements: Mapped[list["EngagementModel"]] = relationship(argument="EngagementModel", back_populates="user", passive_deletes=True)
     reports: Mapped[list["ReportModel"]] = relationship(argument="ReportModel", back_populates="user", passive_deletes=True)
@@ -105,3 +105,16 @@ class UserModel(BaseModel):
 
     def __repr__(self):
         return f"UserModel of {self.username}"
+
+
+class BlockModel(BaseModel):
+    __tablename__ = "user_table"
+
+    blocker_id: Mapped[UUID] = mapped_column(ForeignKey(column="user_table.id", ondelete="CASCADE"))
+    blocked_id: Mapped[UUID] = mapped_column(ForeignKey(column="user_table.id", ondelete="CASCADE"))
+    follow_status: Mapped[FollowStatus] = mapped_column(Enum(FollowStatus, name="follow_status"), default=FollowStatus.accepted)
+    blocker: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="blocked_users", foreign_keys=[blocker_id])
+    blocked: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="blockers", foreign_keys=[blocked_id])
+
+    def __repr__(self):
+        return "BlockModel"

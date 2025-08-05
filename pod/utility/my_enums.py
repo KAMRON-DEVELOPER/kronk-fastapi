@@ -71,6 +71,9 @@ class ReportReason(AutoName):
     impersonation = auto()
     other = auto()
 
+    def human(self) -> str:
+        return self.name.replace("_", " ").capitalize()
+
 
 class ProcessStatus(AutoName):
     pending = auto()

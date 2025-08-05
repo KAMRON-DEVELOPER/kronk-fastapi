@@ -10,11 +10,12 @@ from sqlalchemy import Result, select
 from sqlalchemy.orm import selectinload
 
 from apps.feeds_app.models import (CategoryModel, EngagementType, FeedModel,
-                                   TagModel)
+                                   TagModel, ReportModel)
 from apps.feeds_app.schemas import (EngagementSchema, FeedResponseSchema,
-                                    FeedSchema)
+                                    FeedSchema, ReportOut)
 from apps.feeds_app.tasks import (notify_followers_task,
                                   remove_engagement_task, set_engagement_task)
+from apps.users_app.schemas import ResultSchema
 from settings.my_config import get_settings
 from settings.my_database import DBSession
 from settings.my_dependency import jwtDependency, strictJwtDependency
@@ -22,7 +23,7 @@ from settings.my_exceptions import NotFoundException, ValidationException
 from settings.my_minio import (put_file_to_minio, put_object_to_minio,
                                remove_objects_from_minio)
 from settings.my_redis import cache_manager
-from utility.my_enums import CommentPolicy, FeedVisibility
+from utility.my_enums import CommentPolicy, FeedVisibility, ReportReason
 from utility.my_logger import my_logger
 from utility.validators import (allowed_image_extension,
                                 allowed_video_extension, get_file_extension,
@@ -306,6 +307,52 @@ async def set_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_typ
 
 
 @feed_router.post(path="/engagement/remove", response_model=EngagementSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
+async def remove_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_type: EngagementType, is_comment: bool = False):
+    engagement = await cache_manager.remove_engagement(user_id=jwt.user_id.hex, feed_id=feed_id.hex, engagement_type=engagement_type, is_comment=is_comment)
+    await remove_engagement_task.kiq(user_id=jwt.user_id.hex, feed_id=feed_id, engagement_type=engagement_type)
+    my_logger.debug(f"engagement: {engagement}")
+    return engagement
+
+
+@feed_router.get(path="/report", response_model=ReportOut, status_code=200)
+async def get_report(jwt: strictJwtDependency, feed_id: UUID, session: DBSession):
+    try:
+        stmt = select(ReportModel.report_reason).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id)
+        result = await session.scalars(stmt)
+        reported_reasons: list[ReportReason] = result.all()
+
+        data = {reason.name: False for reason in ReportReason}
+
+        for reason in reported_reasons:
+            data[reason.name] = True
+
+        return data
+    except Exception as e:
+        my_logger.exception(f"Exception while getting report info for feed {feed_id}: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch report data for this feed.")
+
+
+@feed_router.post(path="/report", response_model=ResultSchema, status_code=200)
+async def create_report(jwt: strictJwtDependency, feed_id: UUID, report_reason: ReportReason, session: DBSession):
+    try:
+        exists_stmt = select(select(ReportModel.id).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id, ReportModel.report_reason == report_reason).exists())
+        already_reported = await session.scalar(exists_stmt)
+
+        if already_reported:
+            raise HTTPException(status_code=400, detail=f"You already reported this feed for reason: {report_reason.human()}")
+
+        new_report = ReportModel(user_id=jwt.user_id, feed_id=feed_id, report_reason=report_reason)
+
+        session.add(new_report)
+        await session.commit()
+
+        return {"ok": True}
+    except Exception as e:
+        my_logger.exception(f"Exception while creating report for feed {feed_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit report due to a server error.")
+
+
+@feed_router.post(path="/", response_model=EngagementSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
 async def remove_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_type: EngagementType, is_comment: bool = False):
     engagement = await cache_manager.remove_engagement(user_id=jwt.user_id.hex, feed_id=feed_id.hex, engagement_type=engagement_type, is_comment=is_comment)
     await remove_engagement_task.kiq(user_id=jwt.user_id.hex, feed_id=feed_id, engagement_type=engagement_type)
