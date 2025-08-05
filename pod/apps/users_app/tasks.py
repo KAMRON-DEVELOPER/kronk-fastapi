@@ -1,7 +1,7 @@
 from typing import Annotated, Optional
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqDepends
 
@@ -85,25 +85,32 @@ async def delete_follow_from_db(
     return {"ok": True}
 
 
-@broker.task(task_name="create_block")
-async def block_user_task(blocker_id: UUID, blocked_id: UUID, symmetrical: bool, session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
-    stmt1 = select(select(BlockModel.id).where(BlockModel.blocker_id == blocker_id, BlockModel.blocked_id == blocked_id).exists())
-    blocked_by_target = await session.scalar(stmt1)
+@broker.task(task_name="toggle_block_user")
+async def toggle_block_user_task(blocker_id: UUID, blocked_id: UUID, symmetrical: bool, session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
+    stmt = select(BlockModel).where(BlockModel.blocker_id == blocker_id, BlockModel.blocked_id == blocked_id)
+    existing_block = (await session.execute(stmt)).scalar_one_or_none()
 
-    stmt2 = select(select(BlockModel.id).where(BlockModel.blocker_id == blocked_id, BlockModel.blocked_id == blocker_id).exists())
-    blocks_target = await session.scalar(stmt2)
+    if existing_block:
+        await session.delete(existing_block)
 
-    if blocked_by_target:
-        raise ValueError("You are already blocked by this user.")
-    if blocks_target:
-        raise ValueError("You already blocked this user.")
+        if symmetrical:
+            reverse_stmt = delete(BlockModel).where(BlockModel.blocker_id == blocked_id, BlockModel.blocked_id == blocker_id)
+            await session.execute(reverse_stmt)
 
-    instances = [BlockModel(blocker_id=blocker_id, blocked_id=blocked_id)]
+        await session.commit()
+        return {"ok": True, "action": "unblocked"}
 
-    if symmetrical:
-        instances.append(BlockModel(blocker_id=blocked_id, blocked_id=blocker_id))
+    else:
+        is_blocked_by_target_stmt = select(BlockModel.id).where(BlockModel.blocker_id == blocked_id, BlockModel.blocked_id == blocker_id)
+        is_blocked_by_target = (await session.execute(select(is_blocked_by_target_stmt.exists()))).scalar()
 
-    session.add_all(instances)
-    await session.commit()
+        if is_blocked_by_target:
+            raise ValueError("Cannot block a user who has already blocked you.")
 
-    return {"ok": True}
+        instances = [BlockModel(blocker_id=blocker_id, blocked_id=blocked_id)]
+        if symmetrical:
+            instances.append(BlockModel(blocker_id=blocked_id, blocked_id=blocker_id))
+
+        session.add_all(instances)
+        await session.commit()
+        return {"ok": True, "action": "blocked"}

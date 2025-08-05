@@ -19,7 +19,7 @@ from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     TokenSchema, UserSearchResponseSchema,
                                     VerifySchema)
 from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
-                                  notify_settings_stats, send_email_task, block_user_task)
+                                  notify_settings_stats, send_email_task, toggle_block_user_task)
 from services.firebase_service import verify_id_token
 from settings.my_database import DBSession
 from settings.my_dependency import (create_jwt_token, headerTokenDependency,
@@ -413,11 +413,21 @@ async def get_followings_route(jwt: strictJwtDependency):
     return await cache_manager.get_following(user_id=jwt.user_id.hex)
 
 
-@users_router.get(path="/block-user", response_model=ResultSchema, status_code=200)
-async def block_user(jwt: strictJwtDependency, blocked_id: UUID, symmetrical: bool = False):
+@users_router.get(path="/block-user-status", status_code=200)
+async def get_block_user_status(jwt: strictJwtDependency, blocked_id: UUID):
     try:
-        cache_manager.block_user(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex, symmetrical=symmetrical)
-        await block_user_task.kiq(blocker_id=jwt.user_id, blocked_id=blocked_id, symmetrical=symmetrical)
+        return cache_manager.get_block_status(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex)
+    except Exception as e:
+        my_logger.exception(f"Exception while blocking the user, e: {e}")
+        raise HTTPException(status_code=500, detail="We couldn't block the user.")
+
+
+@users_router.get(path="/toggle-block-user", response_model=ResultSchema, status_code=200)
+async def toggle_block_user(jwt: strictJwtDependency, blocked_id: UUID, symmetrical: bool = False):
+    try:
+        cache_manager.toggle_block_user(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex, symmetrical=symmetrical)
+        await toggle_block_user_task.kiq(blocker_id=jwt.user_id, blocked_id=blocked_id, symmetrical=symmetrical)
+        return {"ok": True}
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=str(ve))
     except Exception as e:

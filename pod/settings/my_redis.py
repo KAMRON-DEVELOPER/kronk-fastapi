@@ -673,7 +673,14 @@ class CacheManager:
 
     """ ****************************************** BLOCKING ****************************************** """
 
-    async def block_user(self, blocker_id: str, blocked_id: str, symmetrical: bool = False):
+    async def get_block_status(self, blocker_id: str, blocked_id: str) -> dict:
+        blocked_target = await self.cache_redis.sismember(f"users:{blocker_id}:blocked", blocked_id)
+        blocked_by_target = await self.cache_redis.sismember(f"users:{blocked_id}:blocked", blocker_id)
+        return {"blocked": blocked_target, "symmetrical": blocked_target and blocked_by_target}
+
+    async def toggle_block_user(self, blocker_id: str, blocked_id: str, symmetrical: bool = False):
+        is_already_blocked = await self.cache_redis.sismember(f"users:{blocker_id}:blocked", blocked_id)
+
         blocker_follows_blocked = await self.cache_redis.sismember(f"users:{blocker_id}:followings", blocked_id)
         blocked_follows_blocker = await self.cache_redis.sismember(f"users:{blocked_id}:followings", blocker_id)
 
@@ -681,41 +688,39 @@ class CacheManager:
         blocker_user_feeds = await self.cache_redis.zrange(f"users:{blocker_id}:user_timeline", 0, -1) if blocked_follows_blocker else []
 
         async with self.cache_redis.pipeline() as pipe:
-            # Add the block from blocker → blocked
-            pipe.sadd(f"users:{blocker_id}:blocked", blocked_id)
+            if is_already_blocked:
+                # 🔓 UNBLOCK logic
+                pipe.srem(f"users:{blocker_id}:blocked", blocked_id)
 
-            # Remove blocker → blocked follow relation
-            if blocker_follows_blocked:
-                pipe.srem(f"users:{blocker_id}:followers", blocked_id)
-                pipe.srem(f"users:{blocked_id}:followings", blocker_id)
-                pipe.hincrby(f"users:{blocked_id}:profile", "followers_count", -1)
-                pipe.hincrby(f"users:{blocker_id}:profile", "followings_count", -1)
-                if blocked_user_feeds:
-                    pipe.zrem(f"users:{blocker_id}:following_timeline", *blocked_user_feeds)
+                if symmetrical:
+                    pipe.srem(f"users:{blocked_id}:blocked", blocker_id)
 
-            if symmetrical:
-                # Add reciprocal block from blocked → blocker
-                pipe.sadd(f"users:{blocked_id}:blocked", blocker_id)
+            else:
+                # 🚫 BLOCK logic
+                pipe.sadd(f"users:{blocker_id}:blocked", blocked_id)
 
-                # Remove blocked → blocker follow relation
-                if blocked_follows_blocker:
-                    pipe.srem(f"users:{blocked_id}:followings", blocker_id)
+                # Remove blocker → blocked follow relation
+                if blocker_follows_blocked:
                     pipe.srem(f"users:{blocker_id}:followers", blocked_id)
-                    pipe.hincrby(f"users:{blocked_id}:profile", "followings_count", -1)
-                    pipe.hincrby(f"users:{blocker_id}:profile", "followers_count", -1)
-                    if blocker_user_feeds:
-                        pipe.zrem(f"users:{blocked_id}:following_timeline", *blocker_user_feeds)
+                    pipe.srem(f"users:{blocked_id}:followings", blocker_id)
+                    pipe.hincrby(f"users:{blocked_id}:profile", "followers_count", -1)
+                    pipe.hincrby(f"users:{blocker_id}:profile", "followings_count", -1)
+                    if blocked_user_feeds:
+                        pipe.zrem(f"users:{blocker_id}:following_timeline", *blocked_user_feeds)
+
+                if symmetrical:
+                    pipe.sadd(f"users:{blocked_id}:blocked", blocker_id)
+
+                    # Remove blocked → blocker follow relation
+                    if blocked_follows_blocker:
+                        pipe.srem(f"users:{blocked_id}:followings", blocker_id)
+                        pipe.srem(f"users:{blocker_id}:followers", blocked_id)
+                        pipe.hincrby(f"users:{blocked_id}:profile", "followings_count", -1)
+                        pipe.hincrby(f"users:{blocker_id}:profile", "followers_count", -1)
+                        if blocker_user_feeds:
+                            pipe.zrem(f"users:{blocked_id}:following_timeline", *blocker_user_feeds)
 
             await pipe.execute()
-
-    async def unblock_user(self, blocker_id: str, blocked_id: str):
-        await self.cache_redis.srem(f"users:{blocker_id}:blocked", blocked_id)
-        await self.cache_redis.srem(f"users:{blocker_id}:symmetric_blocked", blocked_id)
-
-        # Optional: also remove mutual block if it was symmetric
-        if await self.cache_redis.sismember(f"users:{blocked_id}:symmetric_blocked", blocker_id):
-            await self.cache_redis.srem(f"users:{blocked_id}:blocked", blocker_id)
-            await self.cache_redis.srem(f"users:{blocked_id}:symmetric_blocked", blocker_id)
 
     async def is_blocked_by_either(self, user_id: str, other_id: str) -> bool:
         return await self.cache_redis.sismember(f"users:{user_id}:blocked", other_id) or await self.cache_redis.sismember(f"users:{other_id}:blocked", user_id)

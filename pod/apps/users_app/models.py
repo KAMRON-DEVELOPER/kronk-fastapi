@@ -112,7 +112,6 @@ class BlockModel(BaseModel):
 
     blocker_id: Mapped[UUID] = mapped_column(ForeignKey(column="user_table.id", ondelete="CASCADE"))
     blocked_id: Mapped[UUID] = mapped_column(ForeignKey(column="user_table.id", ondelete="CASCADE"))
-    follow_status: Mapped[FollowStatus] = mapped_column(Enum(FollowStatus, name="follow_status"), default=FollowStatus.accepted)
     blocker: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="blocked_users", foreign_keys=[blocker_id])
     blocked: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="blockers", foreign_keys=[blocked_id])
 

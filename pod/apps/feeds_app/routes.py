@@ -314,8 +314,8 @@ async def remove_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_
     return engagement
 
 
-@feed_router.get(path="/report", response_model=ReportOut, status_code=200)
-async def get_report(jwt: strictJwtDependency, feed_id: UUID, session: DBSession):
+@feed_router.get(path="/report-statuses", response_model=ReportOut, status_code=200)
+async def get_report_statuses(jwt: strictJwtDependency, feed_id: UUID, session: DBSession):
     try:
         stmt = select(ReportModel.report_reason).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id)
         result = await session.scalars(stmt)
@@ -332,24 +332,25 @@ async def get_report(jwt: strictJwtDependency, feed_id: UUID, session: DBSession
         raise HTTPException(status_code=500, detail="Could not fetch report data for this feed.")
 
 
-@feed_router.post(path="/report", response_model=ResultSchema, status_code=200)
-async def create_report(jwt: strictJwtDependency, feed_id: UUID, report_reason: ReportReason, session: DBSession):
+@feed_router.post(path="/toggle-report", response_model=ResultSchema, status_code=200)
+async def toggle_report(jwt: strictJwtDependency, feed_id: UUID, report_reason: ReportReason, session: DBSession):
     try:
-        exists_stmt = select(select(ReportModel.id).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id, ReportModel.report_reason == report_reason).exists())
-        already_reported = await session.scalar(exists_stmt)
+        stmt = select(ReportModel).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id, ReportModel.report_reason == report_reason)
+        existing_report = await session.scalar(stmt)
 
-        if already_reported:
-            raise HTTPException(status_code=400, detail=f"You already reported this feed for reason: {report_reason.human()}")
+        if existing_report:
+            await session.delete(existing_report)
+            await session.commit()
+            return {"ok": True, "action": "unreported"}
+        else:
+            new_report = ReportModel(user_id=jwt.user_id, feed_id=feed_id, report_reason=report_reason)
+            session.add(new_report)
+            await session.commit()
+            return {"ok": True, "action": "reported"}
 
-        new_report = ReportModel(user_id=jwt.user_id, feed_id=feed_id, report_reason=report_reason)
-
-        session.add(new_report)
-        await session.commit()
-
-        return {"ok": True}
     except Exception as e:
-        my_logger.exception(f"Exception while creating report for feed {feed_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to submit report due to a server error.")
+        my_logger.exception(f"Exception while toggling report for feed {feed_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to toggle report due to a server error.")
 
 
 @feed_router.post(path="/", response_model=EngagementSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
