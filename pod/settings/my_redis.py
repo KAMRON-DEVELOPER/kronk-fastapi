@@ -299,6 +299,91 @@ class CacheManager:
         feeds: list[dict] = await self._get_feeds(user_id=user_id, feed_ids=feed_ids)
         return {"feeds": feeds, "end": total_count}
 
+    async def _get_feeds(self, feed_ids: list[str], user_id: Optional[str] = None) -> list[dict]:
+        feeds: list[dict] = []
+
+        # Fetch feed metadata
+        async with self.cache_redis.pipeline() as pipe:
+            for feed_id in feed_ids:
+                pipe.hgetall(f"feeds:{feed_id}:meta")
+            feed_metas: list[dict] = await pipe.execute()
+
+        # Process feed metadata
+        for feed_meta in feed_metas:
+            if not feed_meta:
+                continue
+            feeds.append(feed_meta)
+
+        if not feeds:
+            return []
+
+        # Get all author IDs
+        author_ids = {feed["author_id"] for feed in feeds}
+
+        # 🛡️ Filter blocked authors
+        if user_id:
+            async with self.cache_redis.pipeline() as pipe:
+                for author_id in author_ids:
+                    pipe.sismember(f"users:{user_id}:blocked", author_id)
+                    pipe.sismember(f"users:{author_id}:blocked", user_id)
+                block_flags = await pipe.execute()
+
+            # Build block map
+            block_map = {}
+            for i, author_id in enumerate(author_ids):
+                blocked_by_user = bool(block_flags[i * 2])
+                blocked_user = bool(block_flags[i * 2 + 1])
+                block_map[author_id] = blocked_by_user or blocked_user
+
+            feeds = [feed for feed in feeds if not block_map.get(feed["author_id"], False)]
+
+            if not feeds:
+                return []
+
+        # Process engagement results
+        engagement_keys = ["comments", "reposts", "quotes", "likes", "views", "bookmarks"]
+        interaction_keys = ["reposted", "quoted", "liked", "viewed", "bookmarked"]
+
+        async with self.cache_redis.pipeline() as pipe:
+            for feed in feeds:
+                feed_id = feed["id"]
+                for key in engagement_keys:
+                    pipe.scard(f"feeds:{feed_id}:{key}")
+                if user_id:
+                    for key in engagement_keys[1:]:
+                        pipe.sismember(f"feeds:{feed_id}:{key}", user_id)
+            results = await pipe.execute()
+
+        for index, feed in enumerate(feeds):
+            has_interactions = user_id is not None
+            chunk_size = len(engagement_keys) + (len(interaction_keys) if has_interactions else 0)
+            start = index * chunk_size
+
+            metrics = results[start: start + len(engagement_keys)]
+            engagement = {key: value for key, value in zip(engagement_keys, metrics) if value > 0}
+
+            if has_interactions:
+                interactions: list[bool] = results[start + len(engagement_keys): start + chunk_size]
+                engagement.update({interaction_key: True for interaction_key, interacted in zip(interaction_keys, interactions) if interacted})
+
+            feed["engagement"] = engagement
+
+        # Fetch author profiles
+        author_ids = {feed["author_id"] for feed in feeds}
+        keys = ["id", "name", "username", "avatar_url"]
+
+        async with self.cache_redis.pipeline() as pipe:
+            for aid in author_ids:
+                pipe.hmget(f"users:{aid}:profile", keys)
+            profiles = await pipe.execute()
+
+        author_profiles = {profile[0]: dict(zip(keys, profile)) for profile in profiles if profile and profile[0]}
+
+        for feed in feeds:
+            feed["author"] = author_profiles.get(feed.pop("author_id"), {})
+
+        return feeds
+
     """ ********************************************* FEED ********************************************* """
 
     async def create_feed(self, mapping: dict, max_gt: int = 360, max_ft: int = 120, max_ut: int = 120):
@@ -449,66 +534,6 @@ class CacheManager:
             queue.extend(children)
             prefix = "comments"
         return collected
-
-    async def _get_feeds(self, feed_ids: list[str], user_id: Optional[str] = None) -> list[dict]:
-        feeds: list[dict] = []
-
-        # Fetch feed metadata
-        async with self.cache_redis.pipeline() as pipe:
-            for feed_id in feed_ids:
-                pipe.hgetall(f"feeds:{feed_id}:meta")
-            feed_metas: list[dict] = await pipe.execute()
-
-        # Process feed metadata
-        for feed_meta in feed_metas:
-            if not feed_meta:
-                continue
-
-            feeds.append(feed_meta)
-
-        # Process engagement results
-        engagement_keys = ["comments", "reposts", "quotes", "likes", "views", "bookmarks"]
-        interaction_keys = ["reposted", "quoted", "liked", "viewed", "bookmarked"]
-
-        async with self.cache_redis.pipeline() as pipe:
-            for feed in feeds:
-                feed_id = feed["id"]
-                for key in engagement_keys:
-                    pipe.scard(f"feeds:{feed_id}:{key}")
-                if user_id:
-                    for key in engagement_keys[1:]:
-                        pipe.sismember(f"feeds:{feed_id}:{key}", user_id)
-            results = await pipe.execute()
-
-        for index, feed in enumerate(feeds):
-            has_interactions = user_id is not None
-            chunk_size = len(engagement_keys) + (len(interaction_keys) if has_interactions else 0)
-            start = index * chunk_size
-
-            metrics = results[start: start + len(engagement_keys)]
-            engagement = {key: value for key, value in zip(engagement_keys, metrics) if value > 0}
-
-            if has_interactions:
-                interactions: list[bool] = results[start + len(engagement_keys): start + chunk_size]
-                engagement.update({interaction_key: True for interaction_key, interacted in zip(interaction_keys, interactions) if interacted})
-
-            feed["engagement"] = engagement
-
-        # Fetch author profiles
-        author_ids = {feed["author_id"] for feed in feeds}
-        keys = ["id", "name", "username", "avatar_url"]
-
-        async with self.cache_redis.pipeline() as pipe:
-            for aid in author_ids:
-                pipe.hmget(f"users:{aid}:profile", keys)
-            profiles = await pipe.execute()
-
-        author_profiles = {profile[0]: dict(zip(keys, profile)) for profile in profiles if profile and profile[0]}
-
-        for feed in feeds:
-            feed["author"] = author_profiles.get(feed.pop("author_id"), {})
-
-        return feeds
 
     """ ***************************************** INTERACTION ***************************************** """
 
@@ -674,8 +699,8 @@ class CacheManager:
     """ ****************************************** BLOCKING ****************************************** """
 
     async def get_block_status(self, blocker_id: str, blocked_id: str) -> dict:
-        blocked_target = await self.cache_redis.sismember(f"users:{blocker_id}:blocked", blocked_id)
-        blocked_by_target = await self.cache_redis.sismember(f"users:{blocked_id}:blocked", blocker_id)
+        blocked_target = bool(await self.cache_redis.sismember(f"users:{blocker_id}:blocked", blocked_id))
+        blocked_by_target = bool(await self.cache_redis.sismember(f"users:{blocked_id}:blocked", blocker_id))
         return {"blocked": blocked_target, "symmetrical": blocked_target and blocked_by_target}
 
     async def toggle_block_user(self, blocker_id: str, blocked_id: str, symmetrical: bool = False):

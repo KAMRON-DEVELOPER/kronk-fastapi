@@ -416,16 +416,16 @@ async def get_followings_route(jwt: strictJwtDependency):
 @users_router.get(path="/block-user-status", status_code=200)
 async def get_block_user_status(jwt: strictJwtDependency, blocked_id: UUID):
     try:
-        return cache_manager.get_block_status(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex)
+        return await cache_manager.get_block_status(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex)
     except Exception as e:
         my_logger.exception(f"Exception while blocking the user, e: {e}")
         raise HTTPException(status_code=500, detail="We couldn't block the user.")
 
 
-@users_router.get(path="/toggle-block-user", response_model=ResultSchema, status_code=200)
+@users_router.post(path="/toggle-block-user", response_model=ResultSchema, status_code=200)
 async def toggle_block_user(jwt: strictJwtDependency, blocked_id: UUID, symmetrical: bool = False):
     try:
-        cache_manager.toggle_block_user(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex, symmetrical=symmetrical)
+        await cache_manager.toggle_block_user(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex, symmetrical=symmetrical)
         await toggle_block_user_task.kiq(blocker_id=jwt.user_id, blocked_id=blocked_id, symmetrical=symmetrical)
         return {"ok": True}
     except ValueError as ve:
