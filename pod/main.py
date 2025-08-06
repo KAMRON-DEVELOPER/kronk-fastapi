@@ -96,6 +96,11 @@ async def support_page(request: Request):
     return templates.TemplateResponse("support.html", {"request": request})
 
 
+@app.get("/guidelines", response_class=HTMLResponse, include_in_schema=False)
+async def support_page(request: Request):
+    return templates.TemplateResponse("community_guidelines.html", {"request": request})
+
+
 @app.get("/show-support-buttons")
 async def get_show_support_buttons():
     if not await cache_manager.cache_redis.exists("show_support_buttons"):
