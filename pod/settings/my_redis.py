@@ -2,6 +2,7 @@ import json
 import math
 import time
 from datetime import UTC, date, datetime, timedelta, timezone
+from enum import Enum
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
@@ -308,12 +309,47 @@ class CacheManager:
                 pipe.hgetall(f"feeds:{feed_id}:meta")
             feed_metas: list[dict] = await pipe.execute()
 
+        # Process feed metadata and apply visibility filtering
+        valid_feeds = []
+        follower_check_authors = set()
+        author_feed_map = {}
+
         # Process feed metadata
         for feed_meta in feed_metas:
             if not feed_meta:
                 continue
-            feeds.append(feed_meta)
 
+            visibility = feed_meta.get("feed_visibility")
+            author_id = feed_meta.get("author_id")
+
+            # Public feeds always visible
+            if visibility == "public":
+                valid_feeds.append(feed_meta)
+
+            # Private feeds only visible to owner
+            elif visibility == "private":
+                if user_id and user_id == author_id:
+                    valid_feeds.append(feed_meta)
+
+            # Followers-only feeds
+            elif visibility == "followers":
+                if not user_id:
+                    continue  # Anonymous users can't see followers-only
+                if user_id == author_id:
+                    valid_feeds.append(feed_meta)  # Always visible to author
+                else:
+                    # Defer follower check
+                    follower_check_authors.add(author_id)
+                    author_feed_map.setdefault(author_id, []).append(feed_meta)
+
+        # Batch process follower checks
+        if follower_check_authors and user_id:
+            follow_status = await self._check_followers_batch(user_id, list(follower_check_authors))
+            for author_id, is_follower in follow_status.items():
+                if is_follower:
+                    valid_feeds.extend(author_feed_map[author_id])
+
+        feeds = valid_feeds
         if not feeds:
             return []
 
@@ -339,6 +375,9 @@ class CacheManager:
 
             if not feeds:
                 return []
+
+        if not feeds:
+            return []
 
         # Process engagement results
         engagement_keys = ["comments", "reposts", "quotes", "likes", "views", "bookmarks"]
@@ -383,6 +422,14 @@ class CacheManager:
             feed["author"] = author_profiles.get(feed.pop("author_id"), {})
 
         return feeds
+
+    async def _check_followers_batch(self, user_id: str, author_ids: list[str]) -> dict[str, bool]:
+        """Batch check if user follows multiple authors"""
+        async with self.cache_redis.pipeline() as pipe:
+            for author_id in author_ids:
+                pipe.sismember(f"users:{author_id}:followers", user_id)
+            results = await pipe.execute()
+        return {aid: result for aid, result in zip(author_ids, results)}
 
     """ ********************************************* FEED ********************************************* """
 
@@ -445,12 +492,10 @@ class CacheManager:
     async def update_feed(self, feed_id: str, key: str, value: Any):
         if value is None:
             await self.cache_redis.hdel(f"feeds:{feed_id}:meta", key)
-            return
         else:
-            if isinstance(value, list):
-                value = json.dumps(value)
+            if isinstance(value, Enum):
+                value = value.value
             await self.cache_redis.hset(name=f"feeds:{feed_id}:meta", key=key, value=value)
-            return
 
     async def delete_feed(self, author_id: str, feed_id: str):
         my_logger.warning(f"Deleting feed: author_id={author_id}, feed_id={feed_id}")
@@ -540,12 +585,12 @@ class CacheManager:
     async def set_engagement(self, user_id: str, feed_id: str, engagement_type: EngagementType, is_comment: bool = False):
         engagement_key, user_key = _engagement_keys(feed_id=feed_id, user_id=user_id, engagement_type=engagement_type, is_comment=is_comment)
 
-        # if engagement_type == EngagementType.reposts:
-        #     follower_ids = await cache_manager.get_followers(user_id=jwt.user_id.hex)
-        #
-        #     async with cache_manager.cache_redis.pipeline() as pipe:
-        #         for fid in follower_ids:
-        #             pipe.hset(name=f"users:{fid}:following_timeline", value=feed_id.hex)
+        if engagement_type == EngagementType.reposts:
+            follower_ids = await cache_manager.get_followers(user_id=user_id)
+
+            async with cache_manager.cache_redis.pipeline() as pipe:
+                for fid in follower_ids:
+                    pipe.sadd(f"users:{fid}:following_timeline", feed_id)
 
         async with self.cache_redis.pipeline() as pipe:
             pipe.sadd(engagement_key, user_id)

@@ -47,7 +47,9 @@ async def create_feed_route(
         category_id: Annotated[Optional[UUID], Form()] = None,
         tags: Annotated[Optional[list[UUID]], Form()] = None,
         video_file: Annotated[Optional[UploadFile], File()] = None,
+        video_aspect_ratio: Annotated[Optional[float], Form()] = None,
         image_file: Annotated[Optional[UploadFile], File()] = None,
+        image_aspect_ratio: Annotated[Optional[float], Form()] = None,
 ):
     try:
         if not body.strip():
@@ -91,12 +93,14 @@ async def create_feed_route(
             image_url = await validate_and_save_image(user_id=jwt.user_id.hex, image_file=image_file)
             my_logger.debug(f"image_url: {image_url}")
             feed.image_url = image_url
+            feed.image_aspect_ratio = image_aspect_ratio
 
         if video_file:
             my_logger.debug(f"video_file.filename: {video_file.filename}")
             video_url = await validate_and_save_video(user_id=jwt.user_id.hex, video_file=video_file)
             my_logger.debug(f"video_url: {video_url}")
             feed.video_url = video_url
+            feed.video_aspect_ratio = video_aspect_ratio
 
         session.add(instance=feed)
         await session.commit()
@@ -141,6 +145,8 @@ async def update_feed_route(
         my_logger.debug(f"image_file.filename: {image_file.filename if video_file is not None else None}")
         my_logger.debug(f"remove_video: {remove_video}")
         my_logger.debug(f"remove_image: {remove_image}")
+        my_logger.debug(f"feed_visibility: {feed_visibility}")
+        my_logger.debug(f"comment_policy: {comment_policy}")
 
         stmt = select(FeedModel).where(FeedModel.id == feed_id)
         result: Result = await session.execute(stmt)
@@ -168,11 +174,11 @@ async def update_feed_route(
 
         if feed_visibility is not None and feed.feed_visibility != feed_visibility:
             feed.feed_visibility = feed_visibility
-            await cache_manager.update_feed(feed_id=feed.id.hex, key="feed_visibility", value=feed_visibility.value)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="feed_visibility", value=feed_visibility)
 
         if comment_policy is not None and feed.comment_policy != comment_policy:
             feed.comment_policy = comment_policy
-            await cache_manager.update_feed(feed_id=feed.id.hex, key="comment_policy", value=comment_policy.value)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="comment_policy", value=comment_policy)
 
         if category_id:
             category_exists: Optional[CategoryModel] = await session.scalar(select(CategoryModel).where(CategoryModel.id == category_id))
@@ -194,10 +200,14 @@ async def update_feed_route(
 
         if remove_image and feed.image_url:
             await remove_objects_from_minio([feed.image_url])
+            feed.image_url = None
             await cache_manager.update_feed(feed_id=feed.id.hex, key="image_url", value=None)
-        if remove_video and feed.video_url == remove_video:
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="image_aspect_ratio", value=None)
+        if remove_video and feed.video_url:
             await remove_objects_from_minio([feed.video_url])
+            feed.video_url = None
             await cache_manager.update_feed(feed_id=feed.id.hex, key="video_url", value=None)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="video_aspect_ratio", value=None)
 
         if image_file:
             my_logger.debug(f"image_file: {image_file}")
@@ -260,9 +270,9 @@ async def following_timeline_route(jwt: strictJwtDependency, start: int = 0, end
 
 
 @feed_router.get(path="/timeline/user", response_model=FeedResponseSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
-async def user_timeline_route(jwt: strictJwtDependency, engagement_type: EngagementType, start: int = 0, end: int = 9):
+async def user_timeline_route(jwt: strictJwtDependency, engagement_type: EngagementType, user_id: Optional[UUID] = None, start: int = 0, end: int = 9):
     try:
-        feeds = await cache_manager.get_user_timeline(user_id=jwt.user_id.hex, engagement_type=engagement_type, start=start, end=end)
+        feeds = await cache_manager.get_user_timeline(user_id=user_id.hex if user_id else jwt.user_id.hex, engagement_type=engagement_type, start=start, end=end)
         return feeds
     except Exception as e:
         my_logger.debug(f"Exception in user_timeline route: {e}")
@@ -385,8 +395,8 @@ async def validate_and_save_image(user_id: str, image_file: UploadFile) -> str:
     if ext not in allowed_image_extension:
         raise ValidationException(detail="Only PNG, JPG, and JPEG formats are allowed for feed images")
     content = await image_file.read()
-    if len(content) > 12 * 1024 * 1024:
-        raise ValidationException(detail="Feed image size exceeded limit 4MB.")
+    if len(content) > 5 * 1024 * 1024:
+        raise ValidationException(detail="Feed image size exceeded limit 5MB.")
     return await put_object_to_minio(object_name=f"users/{user_id}/feed_images/{image_file.filename}", data=content, content_type=image_file.content_type)
 
 
@@ -423,7 +433,3 @@ async def validate_and_save_video(user_id: str, video_file: UploadFile) -> str:
 
     finally:
         await cleanup_temp_files([temp_video_path, faststart_video_path])
-
-
-def validate_feed_create_fields():
-    pass

@@ -53,7 +53,9 @@ class FeedSchema(BaseModel):
     body: str
     author: AuthorSchema
     video_url: Optional[str] = None
+    video_aspect_ratio: Optional[float] = None
     image_url: Optional[str] = None
+    image_aspect_ratio: Optional[float] = None
     scheduled_at: Optional[datetime] = None
     feed_visibility: FeedVisibility
     comment_policy: CommentPolicy

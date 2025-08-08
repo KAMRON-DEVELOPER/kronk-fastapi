@@ -39,7 +39,6 @@ class FeedVisibility(AutoName):
     public = auto()
     followers = auto()
     private = auto()
-    archived = auto()
 
 
 class FollowPolicy(Enum):

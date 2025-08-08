@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import Optional
 
-from apps.users_app.models import BaseModel, UserModel
-from sqlalchemy import (TIMESTAMP, UUID, Enum, ForeignKey, String,
-                        UniqueConstraint)
+from sqlalchemy import TIMESTAMP, UUID, Enum, ForeignKey, String, UniqueConstraint, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from apps.users_app.models import BaseModel, UserModel
 from utility.my_enums import (CommentPolicy, EngagementType, FeedVisibility,
                               ReportReason)
 
@@ -43,7 +43,9 @@ class FeedModel(BaseModel):
     author: Mapped["UserModel"] = relationship(argument="UserModel", back_populates="feeds")
     # author_username: Mapped[str] = column_property(select(UserModel.username).where(UserModel.id == author_id).correlate_except(UserModel).scalar_subquery())
     video_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    video_aspect_ratio: Mapped[Optional[float]] = mapped_column(Float(precision=4), nullable=True)
     image_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    image_aspect_ratio: Mapped[Optional[float]] = mapped_column(Float(precision=4), nullable=True)
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP, nullable=True)
     feed_visibility: Mapped[FeedVisibility] = mapped_column(Enum(FeedVisibility, name="feed_visibility"), default=FeedVisibility.public)
     comment_policy: Mapped[CommentPolicy] = mapped_column(Enum(CommentPolicy, name="comment_policy"), default=CommentPolicy.everyone)
@@ -66,7 +68,6 @@ class FeedModel(BaseModel):
 
 class EngagementModel(BaseModel):
     __tablename__ = "engagement_table"
-    __table_args__ = (UniqueConstraint("user_id", "feed_id", "engagement_type", name="uq_feed_engagement"),)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user_table.id", ondelete="CASCADE"), nullable=False)
     feed_id: Mapped[UUID] = mapped_column(ForeignKey("feed_table.id", ondelete="CASCADE"), nullable=False)
     engagement_type: Mapped[EngagementType] = mapped_column(Enum(EngagementType, name="engagement_type"), nullable=False)
