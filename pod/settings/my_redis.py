@@ -113,9 +113,10 @@ class ChatCacheManager:
 
     async def create_chat(self, user_id: str, participant_id: str, chat_id: str, mapping: dict):
         last_message: dict = mapping.pop("last_message")
+        now_timestamp = datetime.now(UTC).timestamp()
         async with self.cache_redis.pipeline() as pipe:
-            pipe.zadd(name=f"users:{user_id}:chats", mapping={chat_id: datetime.now(UTC).timestamp()})
-            pipe.zadd(name=f"users:{participant_id}:chats", mapping={chat_id: datetime.now(UTC).timestamp()})
+            pipe.zadd(name=f"users:{user_id}:chats", mapping={chat_id: now_timestamp})
+            pipe.zadd(name=f"users:{participant_id}:chats", mapping={chat_id: now_timestamp})
             pipe.hset(name=f"chats:{chat_id}:meta", mapping=mapping)
             pipe.hset(name=f"chats:{chat_id}:last_message", mapping=last_message)
             pipe.sadd(f"chats:{chat_id}:participants", user_id, participant_id)

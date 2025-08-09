@@ -82,12 +82,12 @@ async def chat_pubsub_generator(user_id: str) -> PubSub:
 
 # Event handlers
 async def handle_goes_online(user_id: str, data: dict[str, str]):
-    my_logger.debug(f"User {data.get('participant_id')} came online")
+    my_logger.debug(f"User {data.get('participant', {}).get('id')} came online")
     await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
 
 
 async def handle_goes_offline(user_id: str, data: dict):
-    my_logger.debug(f"User {data.get('participant_id')} went offline")
+    my_logger.debug(f"User {data.get('participant', {}).get('id')} went offline")
     await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
 
 
@@ -116,7 +116,7 @@ async def handle_sent_message(user_id: str, data: dict):
 
     participant_id: Optional[str] = data.get("participant", {}).get("id", None)
     if not participant_id:
-        my_logger.error("Missing participant_id in sent_message event.")
+        my_logger.error("Missing participant id in sent_message event.")
         return
 
     chat_id: str = data.get("id", "")
@@ -140,9 +140,9 @@ async def handle_sent_message(user_id: str, data: dict):
         },
     }
 
-    # data["last_message"][""] = ''
-
     await chat_cache_manager.create_chat(user_id=user_id, participant_id=participant_id, chat_id=chat_id, mapping=mapping)
+
+    my_logger.debug(f"data type: {type(data)}")
 
     await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
     await chat_ws_manager.send_personal_message(user_id=participant_id, data=data)
