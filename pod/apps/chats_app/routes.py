@@ -129,7 +129,7 @@ async def delete_chat_route(jwt: strictJwtDependency, session: DBSession, chat_i
 
 
 @chats_router.get(path="", response_model=ChatResponseSchema, status_code=200)
-async def get_chats_route(jwt: strictJwtDependency, start: int = 0, end: int = 20):
+async def get_chats_route(jwt: strictJwtDependency, start: int = 0, end: int = 40):
     try:
         response: ChatResponseSchema = await chat_cache_manager.get_chats(user_id=jwt.user_id.hex, start=start, end=end)
         return response
@@ -139,14 +139,21 @@ async def get_chats_route(jwt: strictJwtDependency, start: int = 0, end: int = 2
 
 
 @chats_router.get(path="/messages", response_model=ChatMessageResponseSchema, status_code=200)
-async def get_chat_messages_route(_: strictJwtDependency, session: DBSession, chat_id: UUID, start: int = 0, end: int = 20):
+async def get_chat_messages_route(_: strictJwtDependency, chat_id: UUID, session: DBSession, offset: int = 0, limit: int = 20):
     try:
-        stmt = select(ChatMessageModel).where(ChatMessageModel.chat_id == chat_id).order_by(ChatMessageModel.created_at.asc()).offset(start).limit(end - start)
-        result = await session.scalars(stmt)
-        messages: list[ChatMessageModel] = result.all()
-        my_logger.warning(f"2, len: {len(messages)}")
+        base_stmt = select(ChatMessageModel).where(ChatMessageModel.chat_id == chat_id)
 
-        response = ChatMessageResponseSchema(messages=[ChatMessageSchema.model_validate(obj=message) for message in messages], end=len(messages) - 1)
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = await session.scalar(count_stmt)
+
+        stmt = base_stmt.order_by(ChatMessageModel.created_at.desc()).offset(offset).limit(limit)
+        results = await session.scalars(stmt)
+        messages: list[ChatMessageModel] = results.all()
+
+        my_logger.debug(f"total: {total}, len(messages): {len(messages)}")
+        my_logger.debug(f"offset-limit: {offset}-{limit}")
+
+        response = ChatMessageResponseSchema(messages=[ChatMessageSchema.model_validate(obj=message) for message in messages], total=total)
         return response
     except Exception as e:
         my_logger.exception(f"Exception e: {e}")

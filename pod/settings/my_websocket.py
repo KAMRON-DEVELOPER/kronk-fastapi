@@ -261,17 +261,3 @@ settings_ws_manager = WebSocketManager(redis=my_cache_redis)
 home_timeline_ws_manager = WebSocketManager(redis=my_cache_redis)
 
 chat_ws_manager = WebSocketManager(redis=my_cache_redis)
-
-
-@chat_ws_manager.on("typing_start")
-async def typing_start(data: dict):
-    chat_id = data["chat_id"]
-    user_id = data["user_id"]
-    await chat_ws_manager.broadcast(data={"type": "typing_start", "chat_id": chat_id, "user_id": user_id}, user_ids=[])
-
-
-@chat_ws_manager.on("typing_stop")
-async def typing_stop(data: dict):
-    chat_id = data["chat_id"]
-    user_id = data["user_id"]
-    await chat_ws_manager.broadcast(data={"type": "typing_stop", "chat_id": chat_id, "user_id": user_id}, user_ids=[])

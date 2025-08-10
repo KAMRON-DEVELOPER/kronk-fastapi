@@ -205,52 +205,57 @@ class ChatCacheManager:
 
     """ ****************************************** EVENTS ****************************************** """
 
-    async def add_user_to_chats(self, user_id: str) -> set[str]:
+    async def add_user_to_chats(self, user_id: str) -> tuple[set[str], set[str]]:
         chat_ids: list[str] = await self.cache_redis.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
 
         async with self.cache_redis.pipeline() as pipe:
-            pipe.sadd(f"chats:online", user_id)
+            pipe.sadd("chats:online", user_id)
             for chat_id in chat_ids:
-                pipe.smembers(f"chats:{chat_id}:participants")
+                pipe.sinter(f"chats:{chat_id}:participants", "chats:online")
             results = await pipe.execute()
 
-        # Skip the first result which is from `sadd`
-        all_participants_sets = results[1:]
-        my_logger.warning(f"all_participants_sets: {all_participants_sets}")
-        # Flatten and exclude self
-        other_participants = {pid for pset in all_participants_sets for pid in pset if pid != user_id}
-        my_logger.warning(f"other_participants: {other_participants}")
-        return other_participants
+        online_participants: set[str] = set()
+        chat_ids_with_online: set[str] = set()
+        online_users_per_chat_results: list[set[str]] = results[1:]
 
-    async def remove_user_from_chats(self, user_id: str) -> set[str]:
+        for chat_id, online_in_chat in zip(chat_ids, online_users_per_chat_results):
+            other_online_users = {pid for pid in online_in_chat if pid != user_id}
+            if other_online_users:
+                chat_ids_with_online.add(chat_id)
+                online_participants.update(other_online_users)
+
+        return chat_ids_with_online, online_participants
+
+    async def remove_user_from_chats(self, user_id: str) -> tuple[set[str], set[str]]:
         chat_ids: list[str] = await self.cache_redis.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
 
         async with self.cache_redis.pipeline() as pipe:
             pipe.srem(f"chats:online", user_id)
-            for chat_id in chat_ids:
-                pipe.smembers(f"chats:{chat_id}:participants")
             pipe.hset(f"users:{user_id}:profile", key="last_seen_at", value=int(datetime.now(UTC).timestamp()))
+            for chat_id in chat_ids:
+                pipe.sinter(f"chats:{chat_id}:participants", "chats:online")
             results = await pipe.execute()
 
-        # Skip the first result which is from `sadd`
-        all_participants_sets = results[1:-1]
-        my_logger.warning(f"all_participants_sets: {all_participants_sets}")
-        # Flatten and exclude self
-        other_participants = {pid for pset in all_participants_sets for pid in pset if pid != user_id}
-        my_logger.warning(f"other_participants: {other_participants}")
-        return other_participants
+        online_participants: set[str] = set()
+        chat_ids_with_online: set[str] = set()
+        online_users_per_chat_results: list[set[str]] = results[2:]
 
-    async def add_typing(self, user_id: str, chat_id: str):
-        await self.cache_redis.sadd(f"typing:{chat_id}", user_id)
+        for chat_id, online_in_chat in zip(chat_ids, online_users_per_chat_results):
+            other_online_users = {pid for pid in online_in_chat if pid != user_id}
+            if other_online_users:
+                chat_ids_with_online.add(chat_id)
+                online_participants.update(other_online_users)
 
-    async def remove_typing(self, user_id: str, chat_id: str):
-        await self.cache_redis.srem(f"typing:{chat_id}", user_id)
+        return chat_ids_with_online, online_participants
 
-    async def get_chat_participants(self, chat_id: str) -> set[str]:
-        return await self.cache_redis.smembers(f"chats:{chat_id}:participants")
-
-    async def get_user_chat_ids(self, user_id: str) -> list[str]:
-        return await self.cache_redis.zrevrange(f"users:{user_id}:chats", start=0, end=-1)
+    async def get_chat_participants(self, chat_id: str, user_id: str | None = None, online: bool = False) -> set[str]:
+        if online:
+            participants = await self.cache_redis.sinter(f"chats:{chat_id}:participants", "chats:online")
+            if user_id:
+                participants.discard(user_id)
+            return participants
+        else:
+            return await self.cache_redis.smembers(f"chats:{chat_id}:participants")
 
 
 class CacheManager:

@@ -8,7 +8,7 @@ from redis.asyncio.client import PubSub
 
 from apps.chats_app.tasks import create_chat_message_task
 from settings.my_dependency import websocketDependency
-from settings.my_redis import chat_cache_manager, pubsub_manager, cache_manager
+from settings.my_redis import chat_cache_manager, pubsub_manager
 from settings.my_websocket import WebSocketContextManager, chat_ws_manager
 from utility.my_enums import ChatEvent
 from utility.my_logger import my_logger
@@ -26,8 +26,6 @@ async def enter_home(websocket_dependency: websocketDependency):
         ChatEvent.goes_offline: handle_goes_offline,
         ChatEvent.typing_start: handle_typing_start,
         ChatEvent.typing_stop: handle_typing_stop,
-        ChatEvent.enter_chat: handle_enter_chat,
-        ChatEvent.exit_chat: handle_exit_chat,
         ChatEvent.sent_message: handle_sent_message,
         ChatEvent.created_chat: handle_created_chat,
     }
@@ -46,34 +44,19 @@ async def enter_home(websocket_dependency: websocketDependency):
 # Connection setup
 async def chat_connect(user_id: str, websocket: WebSocket):
     await chat_ws_manager.connect(user_id=user_id, websocket=websocket)
-    participant_ids: set[str] = await chat_cache_manager.add_user_to_chats(user_id=user_id)
-    data = {"type": ChatEvent.goes_online.value, "participant": {"id": user_id}}
-    tasks = [pubsub_manager.publish(topic=f"chats:home:{pid}", data=data) for pid in participant_ids]
-
-    user = await cache_manager.get_profile(user_id=user_id)
-    my_logger.warning(f"user {user.get('name')} is now connected.")
-    for pid in participant_ids:
-        is_online = await cache_manager.cache_redis.sismember(name=f"chats:online", value=pid)
-        my_logger.warning(f"is {pid} online: {is_online}")
-
-    await asyncio.gather(*tasks)
+    results: tuple[set[str], set[str]] = await chat_cache_manager.add_user_to_chats(user_id=user_id)
+    if all(results):
+        my_logger.debug("results has some data")
+        tasks = [pubsub_manager.publish(topic=f"chats:home:{pid}", data={"id": chid, "type": ChatEvent.goes_online.value}) for chid, pid in zip(results[0], results[1])]
+        await asyncio.gather(*tasks)
 
 
 async def chat_disconnect(user_id: str, websocket: WebSocket):
     await chat_ws_manager.disconnect(user_id=user_id, websocket=websocket)
-
-    # Notify participants
-    participant_ids: set[str] = await chat_cache_manager.remove_user_from_chats(user_id)
-    data = {"type": ChatEvent.goes_offline.value, "participant": {"id": user_id}}
-    tasks = [pubsub_manager.publish(topic=f"chats:home:{pid}", data=data) for pid in participant_ids]
-
-    user = await cache_manager.get_profile(user_id=user_id)
-    my_logger.warning(f"user {user.get('name')} is disconnected.")
-    for pid in participant_ids:
-        is_online = await cache_manager.cache_redis.sismember(name=f"chats:online", value=pid)
-        my_logger.warning(f"is {pid} online: {is_online}")
-
-    await asyncio.gather(*tasks)
+    results: tuple[set[str], set[str]] = await chat_cache_manager.remove_user_from_chats(user_id=user_id)
+    if all(results):
+        tasks = [pubsub_manager.publish(topic=f"chats:home:{pid}", data={"id": chid, "type": ChatEvent.goes_offline.value}) for chid, pid in zip(results[0], results[1])]
+        await asyncio.gather(*tasks)
 
 
 async def chat_pubsub_generator(user_id: str) -> PubSub:
@@ -82,33 +65,35 @@ async def chat_pubsub_generator(user_id: str) -> PubSub:
 
 # Event handlers
 async def handle_goes_online(user_id: str, data: dict[str, str]):
-    my_logger.debug(f"User {data.get('participant', {}).get('id')} came online")
     await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
 
 
 async def handle_goes_offline(user_id: str, data: dict):
-    my_logger.debug(f"User {data.get('participant', {}).get('id')} went offline")
     await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
 
 
 async def handle_typing_start(user_id: str, data: dict):
-    my_logger.debug(f"User started typing in {data.get('chat_id')}")
-    await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
+    my_logger.debug(f"User started typing in {data.get('id')}")
+    chat_id: Optional[str] = data.get("id")
+    if not chat_id:
+        await chat_ws_manager.send_personal_message(user_id=user_id, data={"detail": "You must provider chat id!"})
+
+    online_participants: set[str] = await chat_cache_manager.get_chat_participants(chat_id=chat_id, user_id=user_id, online=True)
+    if online_participants:
+        tasks = [chat_ws_manager.send_personal_message(user_id=pid, data=data) for pid in online_participants]
+        await asyncio.gather(*tasks)
 
 
 async def handle_typing_stop(user_id: str, data: dict):
-    my_logger.debug(f"User stopped typing in {data.get('chat_id')}")
-    await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
+    my_logger.debug(f"User stopped typing in {data.get('id')}")
+    chat_id: Optional[str] = data.get("id")
+    if not chat_id:
+        await chat_ws_manager.send_personal_message(user_id=user_id, data={"detail": "You must provider chat id!"})
 
-
-async def handle_enter_chat(user_id: str, data: dict):
-    my_logger.debug(f"User entered to {data.get('chat_id')} room")
-    await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
-
-
-async def handle_exit_chat(user_id: str, data: dict):
-    my_logger.debug(f"User exited from {data.get('chat_id')} room")
-    await chat_ws_manager.send_personal_message(user_id=user_id, data=data)
+    online_participants: set[str] = await chat_cache_manager.get_chat_participants(chat_id=chat_id, user_id=user_id, online=True)
+    if online_participants:
+        tasks = [chat_ws_manager.send_personal_message(user_id=pid, data=data) for pid in online_participants]
+        await asyncio.gather(*tasks)
 
 
 async def handle_sent_message(user_id: str, data: dict):

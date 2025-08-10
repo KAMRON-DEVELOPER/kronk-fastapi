@@ -52,7 +52,7 @@ class ChatResponseSchema(BaseModel):
 
 class ChatMessageResponseSchema(BaseModel):
     messages: list[ChatMessageSchema]
-    end: int
+    total: int
 
     class Config:
         from_attributes = True

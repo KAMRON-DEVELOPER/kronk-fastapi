@@ -109,11 +109,9 @@ class RoomType(AutoName):
 
 
 class ChatEvent(AutoName):
-    typing_start = auto()
-    typing_stop = auto()
     goes_online = auto()
     goes_offline = auto()
-    enter_chat = auto()
-    exit_chat = auto()
-    created_chat = auto()
+    typing_start = auto()
+    typing_stop = auto()
     sent_message = auto()
+    created_chat = auto()
