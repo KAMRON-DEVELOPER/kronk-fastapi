@@ -7,7 +7,6 @@ import aiohttp
 from miniopy_async.api import Minio
 from miniopy_async.datatypes import Object
 from miniopy_async.error import MinioException, S3Error
-# from miniopy_async.datatypes import ListObjects, Object
 from miniopy_async.helpers import ObjectWriteResult
 
 from settings.my_config import get_settings
@@ -19,8 +18,9 @@ minio_client: Minio = Minio(
     access_key=settings.S3_ACCESS_KEY_ID,
     secret_key=settings.S3_SECRET_KEY,
     endpoint=settings.S3_ENDPOINT,
-    region=settings.S3_REGION,
+    region=None if settings.DEBUG else settings.S3_REGION,
     secure=False if settings.DEBUG else True,
+    cert_check=False if settings.DEBUG else True
 )
 
 
@@ -36,6 +36,8 @@ async def initialize_minio():
 
         # Check and apply policy
         try:
+            if settings.DEBUG:
+                return
             current_policy_str = await minio_client.get_bucket_policy(settings.S3_BUCKET_NAME)
             if current_policy_str:
                 current_policy = json.loads(current_policy_str)
@@ -85,7 +87,7 @@ async def put_object_to_minio(object_name: str, data: bytes, content_type: str, 
 
         return result.object_name
     except Exception as e:
-        print(f"Exception in put_data_to_minio: {e}")
+        my_logger.warning(f"Exception in put_data_to_minio: {e}")
         raise ValueError(f"Exception in put_data_to_minio: {e}")
 
 
@@ -93,6 +95,8 @@ async def put_file_to_minio(object_name: str, file_path: Path, content_type: str
     try:
         if for_update and old_object_name:
             await minio_client.remove_object(bucket_name=settings.S3_BUCKET_NAME, object_name=old_object_name)
+
+        my_logger.debug(f"file_path: {file_path}, content_type: {content_type}")
 
         result: ObjectWriteResult = await minio_client.fput_object(
             bucket_name=settings.S3_BUCKET_NAME, object_name=object_name, file_path=str(file_path), content_type=content_type

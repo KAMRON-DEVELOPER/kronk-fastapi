@@ -135,7 +135,9 @@ async def update_feed_route(
         tags: Annotated[Optional[list[UUID]], Form()] = None,
         category_id: Annotated[Optional[UUID], Form()] = None,
         video_file: Annotated[Optional[UploadFile], File()] = None,
+        video_aspect_ratio: Annotated[Optional[float], Form()] = None,
         image_file: Annotated[Optional[UploadFile], File()] = None,
+        image_aspect_ratio: Annotated[Optional[float], Form()] = None,
         remove_video: Annotated[Optional[str], Form()] = None,
         remove_image: Annotated[Optional[str], Form()] = None,
 ):
@@ -203,25 +205,31 @@ async def update_feed_route(
             feed.image_url = None
             await cache_manager.update_feed(feed_id=feed.id.hex, key="image_url", value=None)
             await cache_manager.update_feed(feed_id=feed.id.hex, key="image_aspect_ratio", value=None)
+            feed.image_aspect_ratio = None
         if remove_video and feed.video_url:
             await remove_objects_from_minio([feed.video_url])
             feed.video_url = None
             await cache_manager.update_feed(feed_id=feed.id.hex, key="video_url", value=None)
             await cache_manager.update_feed(feed_id=feed.id.hex, key="video_aspect_ratio", value=None)
+            feed.video_aspect_ratio = None
 
         if image_file:
             my_logger.debug(f"image_file: {image_file}")
             url = await validate_and_save_image(user_id=jwt.user_id.hex, image_file=image_file)
             my_logger.debug(f"url: {url}")
             feed.image_url = url
+            feed.image_aspect_ratio = image_aspect_ratio
             await cache_manager.update_feed(feed_id=feed.id.hex, key="image_url", value=url)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="image_aspect_ratio", value=image_aspect_ratio)
 
         if video_file:
             my_logger.debug(f"video_file.filename: {video_file.filename}")
             object_name = await validate_and_save_video(user_id=jwt.user_id.hex, video_file=video_file)
             my_logger.debug(f"object_name: {object_name}")
             feed.video_url = object_name
+            feed.video_aspect_ratio = video_aspect_ratio
             await cache_manager.update_feed(feed_id=feed.id.hex, key="video_url", value=object_name)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="video_aspect_ratio", value=video_aspect_ratio)
 
         session.add(instance=feed)
         await session.commit()
@@ -429,6 +437,10 @@ async def validate_and_save_video(user_id: str, video_file: UploadFile) -> str:
         ffmpeg = FFmpeg().input(str(faststart_video_path)).output(str(temp_video_path), c="copy", movflags="faststart")
         await ffmpeg.execute()
 
+        if settings.DEBUG:
+            async with aiofiles.open(temp_video_path, mode="rb") as f:
+                data = await f.read()
+                return await put_object_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", data=data, content_type=video_file.content_type)
         return await put_file_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
 
     finally:
