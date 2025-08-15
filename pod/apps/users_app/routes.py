@@ -33,7 +33,7 @@ from settings.my_redis import cache_manager
 from utility.my_enums import FollowStatus
 from utility.my_logger import my_logger
 from utility.utility import (generate_avatar_url, generate_password_string,
-                             generate_username_from_base_name, generate_random_username)
+                             generate_username_from_base_name, generate_random_username, generate_random_name)
 from utility.validators import (allowed_image_extension, get_file_extension,
                                 get_image_dimensions)
 
@@ -198,6 +198,7 @@ async def social_auth(session: DBSession, id_token: Optional[str] = None, author
     if user_name:
         username: str = generate_username_from_base_name(base_name=f"{user_name}")
     else:
+        user_name: str = generate_random_name()
         username: str = generate_random_username()
 
     password_string: str = generate_password_string()
