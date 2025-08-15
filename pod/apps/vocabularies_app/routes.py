@@ -8,9 +8,9 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 
 from apps.users_app.schemas import ResultSchema
+from apps.vocabularies_app.app_tasks import start_ocr_upload_pipeline
 from apps.vocabularies_app.models import VocabularyModel, SentenceModel, MeaningModel, UserVocabularyModel
 from apps.vocabularies_app.schemas import VocabularyOut, SentenceOut, VocabularyResponse, SentenceResponse
-from apps.vocabularies_app.tasks import start_ocr_upload_pipeline
 from settings.my_config import get_settings
 from settings.my_database import DBSession
 from settings.my_dependency import strictJwtDependency

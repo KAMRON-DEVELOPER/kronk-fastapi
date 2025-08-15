@@ -9,18 +9,19 @@ from ffmpeg.asyncio import FFmpeg
 from sqlalchemy import Result, select
 from sqlalchemy.orm import selectinload
 
+from apps.feeds_app.app_tasks import (notify_followers_task,
+                                      remove_engagement_task, set_engagement_task)
 from apps.feeds_app.models import (CategoryModel, EngagementType, FeedModel,
                                    TagModel, ReportModel)
 from apps.feeds_app.schemas import (EngagementSchema, FeedResponseSchema,
                                     FeedSchema, ReportOut)
-from apps.feeds_app.tasks import (notify_followers_task,
-                                  remove_engagement_task, set_engagement_task)
 from apps.users_app.schemas import ResultSchema
+from settings.my_boto3 import put_file_to_boto3
 from settings.my_config import get_settings
 from settings.my_database import DBSession
 from settings.my_dependency import jwtDependency, strictJwtDependency
 from settings.my_exceptions import NotFoundException, ValidationException
-from settings.my_minio import (put_file_to_minio, put_object_to_minio,
+from settings.my_minio import (put_object_to_minio,
                                remove_objects_from_minio)
 from settings.my_redis import cache_manager
 from utility.my_enums import CommentPolicy, FeedVisibility, ReportReason
@@ -436,12 +437,12 @@ async def validate_and_save_video(user_id: str, video_file: UploadFile) -> str:
 
         ffmpeg = FFmpeg().input(str(faststart_video_path)).output(str(temp_video_path), c="copy", movflags="faststart")
         await ffmpeg.execute()
-
-        if settings.DEBUG:
-            async with aiofiles.open(temp_video_path, mode="rb") as f:
-                data = await f.read()
-                return await put_object_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", data=data, content_type=video_file.content_type)
-        return await put_file_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
+        # if settings.DEBUG:
+        #     async with aiofiles.open(temp_video_path, mode="rb") as f:
+        #         data = await f.read()
+        #         return await put_object_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", data=data, content_type=video_file.content_type)
+        # return await put_file_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
+        return await put_file_to_boto3(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
 
     finally:
         await cleanup_temp_files([temp_video_path, faststart_video_path])

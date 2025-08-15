@@ -19,6 +19,7 @@ from apps.notes_app.routes import notes_router
 from apps.users_app.routes import users_router
 from apps.vocabularies_app.routes import vocabularies_router
 from services.firebase_service import initialize_firebase
+from settings.my_boto3 import initialize_boto3
 from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
@@ -40,6 +41,7 @@ async def app_lifespan(_app: FastAPI):
         await initialize_redis_indexes()
         await initialize_db()
         await initialize_minio()
+        await initialize_boto3()
         instrumentator.expose(_app)
         if not broker.is_worker_process:
             await broker.startup()

@@ -6,7 +6,7 @@ from uuid import uuid4, UUID
 from fastapi import APIRouter, WebSocket
 from redis.asyncio.client import PubSub
 
-from apps.chats_app.tasks import create_chat_message_task
+from apps.chats_app.app_tasks import create_chat_message_task
 from settings.my_dependency import websocketDependency
 from settings.my_redis import chat_cache_manager, pubsub_manager
 from settings.my_websocket import WebSocketContextManager, chat_ws_manager

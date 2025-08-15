@@ -7,6 +7,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from firebase_admin.auth import UserRecord
 from sqlalchemy import exists, select
 
+from apps.users_app.app_tasks import (add_follow_to_db, delete_follow_from_db,
+                                      notify_settings_stats, send_email_task, toggle_block_user_task)
 from apps.users_app.models import FollowModel, UserModel
 from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     ProfileSchema, ProfileSearchSchema,
@@ -18,8 +20,6 @@ from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     ResetPasswordSchema, ResultSchema,
                                     TokenSchema, UserSearchResponseSchema,
                                     VerifySchema)
-from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
-                                  notify_settings_stats, send_email_task, toggle_block_user_task)
 from services.firebase_service import verify_id_token
 from settings.my_database import DBSession
 from settings.my_dependency import (create_jwt_token, headerTokenDependency,

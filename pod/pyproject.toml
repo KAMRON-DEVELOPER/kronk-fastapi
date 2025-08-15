@@ -42,7 +42,8 @@ dependencies = [
     "gcloud-aio-storage",
     "nltk",
     "spacy",
-    "pip"
+    "pip",
+    "aioboto3>=15.1.0",
 ]
 
 [tool.pyright]
@@ -87,6 +88,7 @@ dev = [
     "isort",
     "loguru",
     "python-json-logger",
+    "types-aioboto3[essential]",
     "types-redis",
 ]
 
