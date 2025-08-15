@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 import nltk
@@ -152,3 +153,11 @@ async def validation_exception_handler(request: Request, exception: RequestValid
 
     my_logger.warning(f"HTTP validation error during {request.method} {request.url.path}, details: {details}")
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"details": details})
+
+
+class MetricsFilter(logging.Filter):
+    def filter(self, record):
+        return "/metrics" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(MetricsFilter())

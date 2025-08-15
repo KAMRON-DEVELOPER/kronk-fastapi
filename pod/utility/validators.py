@@ -1,5 +1,7 @@
 import json
+import random
 import re
+import string
 import subprocess
 import uuid
 from datetime import datetime
@@ -7,10 +9,12 @@ from io import BytesIO
 from typing import Optional
 
 import cv2
-from fastapi import UploadFile
 from PIL import Image
 from PIL.ImageFile import ImageFile
+from fastapi import UploadFile
+from firebase_admin.auth import UserRecord
 from pymediainfo import MediaInfo, Track
+
 from settings.my_exceptions import ValidationException
 
 email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
@@ -99,7 +103,7 @@ async def get_video_duration_using_mediainfo(file_path: str) -> float:
 
 def get_image_dimensions(image_bytes: bytes) -> tuple[int, int]:
     try:
-        image: ImageFile = Image.open(fp=BytesIO(image_bytes))
+        image: ImageFile = Image.open(fp=BytesIO(image_bytes))  # noqa
         width, height = image.size
         return width, height
     except Exception as e:
@@ -127,3 +131,33 @@ def escape_redisearch_special_chars(value: str) -> str:
     # RediSearch special characters (from official docs)
     special_chars = r'[\[\]\(\)\{\}\<\>\:\\"\'\+\-\=\&\|\!\~\@\#\^\*\%\`\?\.\,\/]'
     return re.sub(special_chars, lambda m: f"\\{m.group(0)}", value)
+
+
+def generate_full_name(given_name: str = None, family_name: str = None, email: str = None) -> str:
+    given_name = (given_name or "").strip()
+    family_name = (family_name or "").strip()
+
+    if given_name and family_name:
+        return f"{given_name} {family_name}".strip()
+    elif given_name:
+        return given_name
+    elif family_name:
+        return family_name
+    elif email:
+        return email.split("@")[0]
+    else:
+        return "New User"
+
+
+def generate_unique_username(base_name: str) -> str:
+    base = ''.join(ch for ch in base_name.lower().replace(' ', '_') if ch.isalnum() or ch == '_')
+    suffix = ''.join(random.choices(string.digits, k=4))
+    return f"{base}_{suffix}"
+
+
+def validate_first_time_apple_signin(firebase_user: UserRecord) -> tuple[str, str]:
+    full_name = generate_full_name(getattr(firebase_user, "display_name", None) or "", "", firebase_user.email)
+
+    username = generate_unique_username(full_name)
+
+    return full_name, username

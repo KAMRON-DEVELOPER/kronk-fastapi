@@ -35,8 +35,12 @@ async def get_dominant_color(image_url: str) -> Optional[str]:
         return None
 
 
-def generate_unique_username(base_name: str) -> str:
+def generate_username_from_base_name(base_name: str) -> str:
     return re.sub(pattern=r"[^a-zA-Z0-9_]", repl="", string=base_name.lower().replace(" ", "_"))
+
+
+def generate_random_username(length: int = 8) -> str:
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
 def generate_password_string() -> str:

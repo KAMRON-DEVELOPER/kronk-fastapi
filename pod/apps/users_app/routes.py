@@ -33,7 +33,7 @@ from settings.my_redis import cache_manager
 from utility.my_enums import FollowStatus
 from utility.my_logger import my_logger
 from utility.utility import (generate_avatar_url, generate_password_string,
-                             generate_unique_username)
+                             generate_username_from_base_name, generate_random_username)
 from utility.validators import (allowed_image_extension, get_file_extension,
                                 get_image_dimensions)
 
@@ -173,26 +173,36 @@ async def forgot_password_route(schema: ResetPasswordSchema, htd: headerTokenDep
 
 
 @users_router.post(path="/auth/social", response_model=ProfileTokenSchema, status_code=200)
-async def social_auth(session: DBSession, id_token: Optional[str] = None, authorization_code: Optional[str] = None):
+async def social_auth(session: DBSession, id_token: Optional[str] = None, authorization_code: Optional[str] = None, email: Optional[str] = None, name: Optional[str] = None):
     my_logger.debug(f"id_token: {id_token}")
     my_logger.debug(f"authorization_code: {authorization_code}")
+    my_logger.debug(f"email: {authorization_code}")
+    my_logger.debug(f"full_name: {authorization_code}")
     if not id_token:
-        raise HeaderTokenException("Firebase ID token is missing in the headers.")
+        raise HTTPException(status_code=400, detail="Firebase ID token is missing.")
 
     firebase_user: UserRecord = await verify_id_token(id_token)
 
-    stmt = select(UserModel).where(UserModel.email == firebase_user.email)
+    user_email = firebase_user.email or email
+    user_name = firebase_user.display_name or name
+
+    if not user_email:
+        raise HTTPException(status_code=400, detail="User email is missing and could not be retrieved.")
+
+    stmt = select(UserModel).where(UserModel.email == user_email)
     result = await session.execute(stmt)
     user: Optional[UserModel] = result.scalar_one_or_none()
-
     if user is not None:
         return await cache_profile(user=user)
 
-    username: str = generate_unique_username(base_name=f"{firebase_user.display_name}")
-    password_string: str = generate_password_string()
+    if user_name:
+        username: str = generate_username_from_base_name(base_name=f"{user_name}")
+    else:
+        username: str = generate_random_username()
 
-    new_user = UserModel(name=firebase_user.display_name, username=username, email=firebase_user.email,
-                         password=hashpw(password=password_string.encode(), salt=gensalt(rounds=8)).decode())
+    password_string: str = generate_password_string()
+    password = hashpw(password=password_string.encode(), salt=gensalt(rounds=8)).decode()
+    new_user = UserModel(name=user_name, username=username, email=user_email, password=password)
     session.add(instance=new_user)
     await session.commit()
     await session.refresh(instance=new_user)
