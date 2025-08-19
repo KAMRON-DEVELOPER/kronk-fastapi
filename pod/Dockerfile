@@ -22,6 +22,7 @@ COPY ./services ./services
 COPY ./utility ./utility
 COPY ./static ./static
 
+RUN uv lock
 RUN uv sync --locked
 RUN uv run --with spacy -- spacy download en_core_web_sm
 
