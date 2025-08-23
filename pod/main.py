@@ -5,10 +5,8 @@ import nltk
 import taskiq_fastapi
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from starlette.staticfiles import StaticFiles
 
 from apps.admin_app.ws import admin_ws_router
 from apps.chats_app.routes import chats_router
@@ -24,7 +22,7 @@ from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
 from settings.my_minio import initialize_minio
-from settings.my_redis import initialize_redis_indexes, cache_manager
+from settings.my_redis import initialize_redis_indexes
 from settings.my_taskiq import broker
 from utility.my_logger import my_logger
 
@@ -60,62 +58,10 @@ app: FastAPI = FastAPI(lifespan=app_lifespan)
 instrumentator = Instrumentator().instrument(app)
 taskiq_fastapi.init(broker=broker, app_or_path=app)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="static/templates")
-
 
 @app.get(path="/", tags=["root"])
 async def root() -> dict:
     return {"status": "ok"}
-
-
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return FileResponse("static/favicon.ico")
-
-
-@app.get("/terms", response_class=HTMLResponse, include_in_schema=False)
-async def terms_of_service(request: Request):
-    return templates.TemplateResponse("terms_of_service.html", {"request": request})
-
-
-@app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)
-async def privacy_policy(request: Request):
-    return templates.TemplateResponse("privacy_policy.html", {"request": request})
-
-
-@app.get("/safety", response_class=HTMLResponse, include_in_schema=False)
-async def safety(request: Request):
-    return templates.TemplateResponse("safety.html", {"request": request})
-
-
-@app.get("/account-deletion-info", response_class=HTMLResponse, include_in_schema=False)
-async def account_deletion_info(request: Request):
-    return templates.TemplateResponse("account_deletion_info.html", {"request": request})
-
-
-@app.get("/support", response_class=HTMLResponse, include_in_schema=False)
-async def support_page(request: Request):
-    return templates.TemplateResponse("support.html", {"request": request})
-
-
-@app.get("/guidelines", response_class=HTMLResponse, include_in_schema=False)
-async def support_page(request: Request):
-    return templates.TemplateResponse("community_guidelines.html", {"request": request})
-
-
-@app.get("/show-support-buttons")
-async def get_show_support_buttons():
-    if not await cache_manager.cache_redis.exists("show_support_buttons"):
-        await cache_manager.cache_redis.set(name="show_support_buttons", value=0)
-    return {"show_support_buttons": await cache_manager.cache_redis.get(name="show_support_buttons") == "1"}
-
-
-@app.post("/show-support-buttons")
-async def set_show_support_buttons():
-    value = "0" if await cache_manager.cache_redis.get(name="show_support_buttons") == "1" else "1"
-    await cache_manager.cache_redis.set(name="show_support_buttons", value=value)
-    return {"show_support_buttons": value == "1"}
 
 
 # HTTP Routes
