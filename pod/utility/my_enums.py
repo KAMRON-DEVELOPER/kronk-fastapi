@@ -39,7 +39,6 @@ class FeedVisibility(AutoName):
     public = auto()
     followers = auto()
     private = auto()
-    archived = auto()
 
 
 class FollowPolicy(Enum):
@@ -70,6 +69,9 @@ class ReportReason(AutoName):
     self_harm_or_suicide = auto()
     impersonation = auto()
     other = auto()
+
+    def human(self) -> str:
+        return self.name.replace("_", " ").capitalize()
 
 
 class ProcessStatus(AutoName):
@@ -107,11 +109,9 @@ class RoomType(AutoName):
 
 
 class ChatEvent(AutoName):
-    typing_start = auto()
-    typing_stop = auto()
     goes_online = auto()
     goes_offline = auto()
-    enter_chat = auto()
-    exit_chat = auto()
-    created_chat = auto()
+    typing_start = auto()
+    typing_stop = auto()
     sent_message = auto()
+    created_chat = auto()

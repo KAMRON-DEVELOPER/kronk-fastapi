@@ -1,5 +1,13 @@
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
+
+
+# Install ffmpeg (includes ffprobe)
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -14,7 +22,9 @@ COPY ./services ./services
 COPY ./utility ./utility
 COPY ./static ./static
 
+RUN uv lock
 RUN uv sync --locked
+RUN uv run --with spacy -- spacy download en_core_web_sm
 
 # CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 # CMD ["uv", "run", "taskiq", "worker", "settings.my_taskiq:broker"]

@@ -4,24 +4,27 @@ from typing import Annotated, Optional
 from uuid import UUID
 
 import aiofiles
-from apps.feeds_app.models import (CategoryModel, EngagementType, FeedModel,
-                                   TagModel)
-from apps.feeds_app.schemas import (EngagementSchema, FeedResponseSchema,
-                                    FeedSchema)
-from apps.feeds_app.tasks import (notify_followers_task,
-                                  remove_engagement_task, set_engagement_task)
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from ffmpeg.asyncio import FFmpeg
+from sqlalchemy import Result, select
+from sqlalchemy.orm import selectinload
+
+from apps.feeds_app.app_tasks import (notify_followers_task,
+                                      remove_engagement_task, set_engagement_task)
+from apps.feeds_app.models import (CategoryModel, EngagementType, FeedModel,
+                                   TagModel, ReportModel)
+from apps.feeds_app.schemas import (EngagementSchema, FeedResponseSchema,
+                                    FeedSchema, ReportOut)
+from apps.users_app.schemas import ResultSchema
+from settings.my_boto3 import put_file_to_boto3
 from settings.my_config import get_settings
 from settings.my_database import DBSession
 from settings.my_dependency import jwtDependency, strictJwtDependency
 from settings.my_exceptions import NotFoundException, ValidationException
-from settings.my_minio import (put_file_to_minio, put_object_to_minio,
+from settings.my_minio import (put_object_to_minio,
                                remove_objects_from_minio)
 from settings.my_redis import cache_manager
-from sqlalchemy import Result, select
-from sqlalchemy.orm import selectinload
-from utility.my_enums import CommentPolicy, FeedVisibility
+from utility.my_enums import CommentPolicy, FeedVisibility, ReportReason
 from utility.my_logger import my_logger
 from utility.validators import (allowed_image_extension,
                                 allowed_video_extension, get_file_extension,
@@ -34,18 +37,20 @@ settings = get_settings()
 
 @feed_router.post(path="/create", response_model=FeedSchema, response_model_exclude_defaults=True, response_model_exclude_none=True, status_code=201)
 async def create_feed_route(
-    jwt: strictJwtDependency,
-    session: DBSession,
-    body: Annotated[Optional[str], Form()] = None,
-    scheduled_at: Annotated[Optional[datetime], Form()] = None,
-    feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
-    comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
-    quote_id: Annotated[Optional[UUID], Form()] = None,
-    parent_id: Annotated[Optional[UUID], Form()] = None,
-    category_id: Annotated[Optional[UUID], Form()] = None,
-    tags: Annotated[Optional[list[UUID]], Form()] = None,
-    video_file: Annotated[Optional[UploadFile], File()] = None,
-    image_file: Annotated[Optional[UploadFile], File()] = None,
+        jwt: strictJwtDependency,
+        session: DBSession,
+        body: Annotated[Optional[str], Form()] = None,
+        scheduled_at: Annotated[Optional[datetime], Form()] = None,
+        feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
+        comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
+        quote_id: Annotated[Optional[UUID], Form()] = None,
+        parent_id: Annotated[Optional[UUID], Form()] = None,
+        category_id: Annotated[Optional[UUID], Form()] = None,
+        tags: Annotated[Optional[list[UUID]], Form()] = None,
+        video_file: Annotated[Optional[UploadFile], File()] = None,
+        video_aspect_ratio: Annotated[Optional[float], Form()] = None,
+        image_file: Annotated[Optional[UploadFile], File()] = None,
+        image_aspect_ratio: Annotated[Optional[float], Form()] = None,
 ):
     try:
         if not body.strip():
@@ -89,12 +94,14 @@ async def create_feed_route(
             image_url = await validate_and_save_image(user_id=jwt.user_id.hex, image_file=image_file)
             my_logger.debug(f"image_url: {image_url}")
             feed.image_url = image_url
+            feed.image_aspect_ratio = image_aspect_ratio
 
         if video_file:
             my_logger.debug(f"video_file.filename: {video_file.filename}")
             video_url = await validate_and_save_video(user_id=jwt.user_id.hex, video_file=video_file)
             my_logger.debug(f"video_url: {video_url}")
             feed.video_url = video_url
+            feed.video_aspect_ratio = video_aspect_ratio
 
         session.add(instance=feed)
         await session.commit()
@@ -119,19 +126,21 @@ async def create_feed_route(
 
 @feed_router.patch(path="/update", response_model=FeedSchema, status_code=200)
 async def update_feed_route(
-    jwt: strictJwtDependency,
-    session: DBSession,
-    feed_id: UUID,
-    body: Annotated[Optional[str], Form()] = None,
-    scheduled_at: Annotated[Optional[datetime], Form()] = None,
-    feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
-    comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
-    tags: Annotated[Optional[list[UUID]], Form()] = None,
-    category_id: Annotated[Optional[UUID], Form()] = None,
-    video_file: Annotated[Optional[UploadFile], File()] = None,
-    image_file: Annotated[Optional[UploadFile], File()] = None,
-    remove_video: Annotated[Optional[str], Form()] = None,
-    remove_image: Annotated[Optional[str], Form()] = None,
+        jwt: strictJwtDependency,
+        session: DBSession,
+        feed_id: UUID,
+        body: Annotated[Optional[str], Form()] = None,
+        scheduled_at: Annotated[Optional[datetime], Form()] = None,
+        feed_visibility: Annotated[Optional[FeedVisibility], Form()] = None,
+        comment_policy: Annotated[Optional[CommentPolicy], Form()] = None,
+        tags: Annotated[Optional[list[UUID]], Form()] = None,
+        category_id: Annotated[Optional[UUID], Form()] = None,
+        video_file: Annotated[Optional[UploadFile], File()] = None,
+        video_aspect_ratio: Annotated[Optional[float], Form()] = None,
+        image_file: Annotated[Optional[UploadFile], File()] = None,
+        image_aspect_ratio: Annotated[Optional[float], Form()] = None,
+        remove_video: Annotated[Optional[str], Form()] = None,
+        remove_image: Annotated[Optional[str], Form()] = None,
 ):
     try:
         my_logger.debug(f"body: {body}")
@@ -139,6 +148,8 @@ async def update_feed_route(
         my_logger.debug(f"image_file.filename: {image_file.filename if video_file is not None else None}")
         my_logger.debug(f"remove_video: {remove_video}")
         my_logger.debug(f"remove_image: {remove_image}")
+        my_logger.debug(f"feed_visibility: {feed_visibility}")
+        my_logger.debug(f"comment_policy: {comment_policy}")
 
         stmt = select(FeedModel).where(FeedModel.id == feed_id)
         result: Result = await session.execute(stmt)
@@ -166,11 +177,11 @@ async def update_feed_route(
 
         if feed_visibility is not None and feed.feed_visibility != feed_visibility:
             feed.feed_visibility = feed_visibility
-            await cache_manager.update_feed(feed_id=feed.id.hex, key="feed_visibility", value=feed_visibility.value)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="feed_visibility", value=feed_visibility)
 
         if comment_policy is not None and feed.comment_policy != comment_policy:
             feed.comment_policy = comment_policy
-            await cache_manager.update_feed(feed_id=feed.id.hex, key="comment_policy", value=comment_policy.value)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="comment_policy", value=comment_policy)
 
         if category_id:
             category_exists: Optional[CategoryModel] = await session.scalar(select(CategoryModel).where(CategoryModel.id == category_id))
@@ -192,22 +203,34 @@ async def update_feed_route(
 
         if remove_image and feed.image_url:
             await remove_objects_from_minio([feed.image_url])
-        if remove_video and feed.video_url == remove_video:
+            feed.image_url = None
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="image_url", value=None)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="image_aspect_ratio", value=None)
+            feed.image_aspect_ratio = None
+        if remove_video and feed.video_url:
             await remove_objects_from_minio([feed.video_url])
+            feed.video_url = None
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="video_url", value=None)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="video_aspect_ratio", value=None)
+            feed.video_aspect_ratio = None
 
         if image_file:
             my_logger.debug(f"image_file: {image_file}")
             url = await validate_and_save_image(user_id=jwt.user_id.hex, image_file=image_file)
             my_logger.debug(f"url: {url}")
             feed.image_url = url
+            feed.image_aspect_ratio = image_aspect_ratio
             await cache_manager.update_feed(feed_id=feed.id.hex, key="image_url", value=url)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="image_aspect_ratio", value=image_aspect_ratio)
 
         if video_file:
             my_logger.debug(f"video_file.filename: {video_file.filename}")
             object_name = await validate_and_save_video(user_id=jwt.user_id.hex, video_file=video_file)
             my_logger.debug(f"object_name: {object_name}")
             feed.video_url = object_name
+            feed.video_aspect_ratio = video_aspect_ratio
             await cache_manager.update_feed(feed_id=feed.id.hex, key="video_url", value=object_name)
+            await cache_manager.update_feed(feed_id=feed.id.hex, key="video_aspect_ratio", value=video_aspect_ratio)
 
         session.add(instance=feed)
         await session.commit()
@@ -256,9 +279,9 @@ async def following_timeline_route(jwt: strictJwtDependency, start: int = 0, end
 
 
 @feed_router.get(path="/timeline/user", response_model=FeedResponseSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
-async def user_timeline_route(jwt: strictJwtDependency, engagement_type: EngagementType, start: int = 0, end: int = 9):
+async def user_timeline_route(jwt: strictJwtDependency, engagement_type: EngagementType, user_id: Optional[UUID] = None, start: int = 0, end: int = 9):
     try:
-        feeds = await cache_manager.get_user_timeline(user_id=jwt.user_id.hex, engagement_type=engagement_type, start=start, end=end)
+        feeds = await cache_manager.get_user_timeline(user_id=user_id.hex if user_id else jwt.user_id.hex, engagement_type=engagement_type, start=start, end=end)
         return feeds
     except Exception as e:
         my_logger.debug(f"Exception in user_timeline route: {e}")
@@ -299,18 +322,57 @@ async def set_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_typ
     engagement = await cache_manager.set_engagement(user_id=jwt.user_id.hex, feed_id=feed_id.hex, engagement_type=engagement_type, is_comment=is_comment)
     await set_engagement_task.kiq(user_id=jwt.user_id.hex, feed_id=feed_id, engagement_type=engagement_type)
     my_logger.debug(f"engagement: {engagement}")
-
-    if engagement_type == EngagementType.reposts:
-        follower_ids = cache_manager.get_followers(user_id=jwt.user_id.hex)
-
-        async with cache_manager.cache_redis.pipeline() as pipe:
-            for fid in follower_ids:
-                pipe.hset(name=f"users:{fid}:following_timeline", value=feed_id.hex)
-
     return engagement
 
 
 @feed_router.post(path="/engagement/remove", response_model=EngagementSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
+async def remove_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_type: EngagementType, is_comment: bool = False):
+    engagement = await cache_manager.remove_engagement(user_id=jwt.user_id.hex, feed_id=feed_id.hex, engagement_type=engagement_type, is_comment=is_comment)
+    await remove_engagement_task.kiq(user_id=jwt.user_id.hex, feed_id=feed_id, engagement_type=engagement_type)
+    my_logger.debug(f"engagement: {engagement}")
+    return engagement
+
+
+@feed_router.get(path="/report-statuses", response_model=ReportOut, status_code=200)
+async def get_report_statuses(jwt: strictJwtDependency, feed_id: UUID, session: DBSession):
+    try:
+        stmt = select(ReportModel.report_reason).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id)
+        result = await session.scalars(stmt)
+        reported_reasons: list[ReportReason] = result.all()
+
+        data = {reason.name: False for reason in ReportReason}
+
+        for reason in reported_reasons:
+            data[reason.name] = True
+
+        return data
+    except Exception as e:
+        my_logger.exception(f"Exception while getting report info for feed {feed_id}: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch report data for this feed.")
+
+
+@feed_router.post(path="/toggle-report", response_model=ResultSchema, status_code=200)
+async def toggle_report(jwt: strictJwtDependency, feed_id: UUID, report_reason: ReportReason, session: DBSession):
+    try:
+        stmt = select(ReportModel).where(ReportModel.user_id == jwt.user_id, ReportModel.feed_id == feed_id, ReportModel.report_reason == report_reason)
+        existing_report = await session.scalar(stmt)
+
+        if existing_report:
+            await session.delete(existing_report)
+            await session.commit()
+            return {"ok": True, "action": "unreported"}
+        else:
+            new_report = ReportModel(user_id=jwt.user_id, feed_id=feed_id, report_reason=report_reason)
+            session.add(new_report)
+            await session.commit()
+            return {"ok": True, "action": "reported"}
+
+    except Exception as e:
+        my_logger.exception(f"Exception while toggling report for feed {feed_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to toggle report due to a server error.")
+
+
+@feed_router.post(path="/", response_model=EngagementSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
 async def remove_engagement(jwt: strictJwtDependency, feed_id: UUID, engagement_type: EngagementType, is_comment: bool = False):
     engagement = await cache_manager.remove_engagement(user_id=jwt.user_id.hex, feed_id=feed_id.hex, engagement_type=engagement_type, is_comment=is_comment)
     await remove_engagement_task.kiq(user_id=jwt.user_id.hex, feed_id=feed_id, engagement_type=engagement_type)
@@ -342,8 +404,8 @@ async def validate_and_save_image(user_id: str, image_file: UploadFile) -> str:
     if ext not in allowed_image_extension:
         raise ValidationException(detail="Only PNG, JPG, and JPEG formats are allowed for feed images")
     content = await image_file.read()
-    if len(content) > 4 * 1024 * 1024:
-        raise ValidationException(detail="Feed image size exceeded limit 4MB.")
+    if len(content) > 5 * 1024 * 1024:
+        raise ValidationException(detail="Feed image size exceeded limit 5MB.")
     return await put_object_to_minio(object_name=f"users/{user_id}/feed_images/{image_file.filename}", data=content, content_type=image_file.content_type)
 
 
@@ -370,17 +432,17 @@ async def validate_and_save_video(user_id: str, video_file: UploadFile) -> str:
             await out_file.flush()
 
         duration = await get_video_duration_using_ffprobe(str(faststart_video_path))
-        if duration > 220:
-            raise ValidationException("Video exceeds max allowed duration (220 seconds).")
+        if duration > 480:
+            raise ValidationException("Video exceeds max allowed duration (480 seconds).")
 
         ffmpeg = FFmpeg().input(str(faststart_video_path)).output(str(temp_video_path), c="copy", movflags="faststart")
         await ffmpeg.execute()
-
-        return await put_file_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
+        # if settings.DEBUG:
+        #     async with aiofiles.open(temp_video_path, mode="rb") as f:
+        #         data = await f.read()
+        #         return await put_object_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", data=data, content_type=video_file.content_type)
+        # return await put_file_to_minio(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
+        return await put_file_to_boto3(object_name=f"users/{user_id}/feed_videos/{video_file.filename}", file_path=temp_video_path, content_type=video_file.content_type)
 
     finally:
         await cleanup_temp_files([temp_video_path, faststart_video_path])
-
-
-def validate_feed_create_fields():
-    pass

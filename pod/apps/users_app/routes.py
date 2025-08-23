@@ -2,6 +2,13 @@ from random import randint
 from typing import Annotated, Optional
 from uuid import UUID
 
+from bcrypt import checkpw, gensalt, hashpw
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from firebase_admin.auth import UserRecord
+from sqlalchemy import exists, select
+
+from apps.users_app.app_tasks import (add_follow_to_db, delete_follow_from_db,
+                                      notify_settings_stats, send_email_task, toggle_block_user_task)
 from apps.users_app.models import FollowModel, UserModel
 from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     ProfileSchema, ProfileSearchSchema,
@@ -13,12 +20,7 @@ from apps.users_app.schemas import (ForgotPasswordTokenSchema, LoginSchema,
                                     ResetPasswordSchema, ResultSchema,
                                     TokenSchema, UserSearchResponseSchema,
                                     VerifySchema)
-from apps.users_app.tasks import (add_follow_to_db, delete_follow_from_db,
-                                  notify_settings_stats, send_email_task)
-from bcrypt import checkpw, gensalt, hashpw
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from firebase_admin.auth import UserRecord
-from services.firebase_service import validate_firebase_token
+from services.firebase_service import verify_id_token
 from settings.my_database import DBSession
 from settings.my_dependency import (create_jwt_token, headerTokenDependency,
                                     jwtDependency, strictJwtDependency)
@@ -28,11 +30,10 @@ from settings.my_exceptions import (AlreadyExistException,
 from settings.my_minio import (put_object_to_minio, remove_objects_from_minio,
                                wipe_objects_from_minio)
 from settings.my_redis import cache_manager
-from sqlalchemy import exists, select
 from utility.my_enums import FollowStatus
 from utility.my_logger import my_logger
 from utility.utility import (generate_avatar_url, generate_password_string,
-                             generate_unique_username)
+                             generate_username_from_base_name, generate_random_username, generate_random_name)
 from utility.validators import (allowed_image_extension, get_file_extension,
                                 get_image_dimensions)
 
@@ -171,24 +172,38 @@ async def forgot_password_route(schema: ResetPasswordSchema, htd: headerTokenDep
     return await cache_profile(user=user)
 
 
-@users_router.post(path="/auth/social/google", response_model=ProfileTokenSchema, status_code=200)
-async def google_auth_route(htd: headerTokenDependency, session: DBSession):
-    if not htd.firebase_id_token:
-        raise HeaderTokenException("Firebase ID token is missing in the headers.")
+@users_router.post(path="/auth/social", response_model=ProfileTokenSchema, status_code=200)
+async def social_auth(session: DBSession, id_token: Optional[str] = None, authorization_code: Optional[str] = None, email: Optional[str] = None, name: Optional[str] = None):
+    my_logger.debug(f"id_token: {id_token}")
+    my_logger.debug(f"authorization_code: {authorization_code}")
+    my_logger.debug(f"email: {authorization_code}")
+    my_logger.debug(f"full_name: {authorization_code}")
+    if not id_token:
+        raise HTTPException(status_code=400, detail="Firebase ID token is missing.")
 
-    firebase_user: UserRecord = await validate_firebase_token(htd.firebase_id_token)
+    firebase_user: UserRecord = await verify_id_token(id_token)
 
-    stmt = select(UserModel).where(UserModel.email == firebase_user.email)
+    user_email = firebase_user.email or email
+    user_name = firebase_user.display_name or name
+
+    if not user_email:
+        raise HTTPException(status_code=400, detail="User email is missing and could not be retrieved.")
+
+    stmt = select(UserModel).where(UserModel.email == user_email)
     result = await session.execute(stmt)
     user: Optional[UserModel] = result.scalar_one_or_none()
-
     if user is not None:
         return await cache_profile(user=user)
 
-    username: str = generate_unique_username(base_name=f"{firebase_user.display_name}")
-    password_string: str = generate_password_string()
+    if user_name:
+        username: str = generate_username_from_base_name(base_name=f"{user_name}")
+    else:
+        user_name: str = generate_random_name()
+        username: str = generate_random_username()
 
-    new_user = UserModel(username=username, email=firebase_user.email, password=hashpw(password=password_string.encode(), salt=gensalt(rounds=8)).decode())
+    password_string: str = generate_password_string()
+    password = hashpw(password=password_string.encode(), salt=gensalt(rounds=8)).decode()
+    new_user = UserModel(name=user_name, username=username, email=user_email, password=password)
     session.add(instance=new_user)
     await session.commit()
     await session.refresh(instance=new_user)
@@ -209,7 +224,6 @@ async def google_auth_route(htd: headerTokenDependency, session: DBSession):
 
 @users_router.get(path="/profile", response_model=ProfileSearchSchema, response_model_exclude_none=True, response_model_exclude_defaults=True, status_code=200)
 async def get_profile_route(jwt: strictJwtDependency, session: DBSession, target_user_id: Optional[str] = None):
-    my_logger.info(f"target_user_id: {target_user_id}, type: {type(target_user_id)}")
     cached_user: Optional[dict] = await cache_manager.get_profile(user_id=jwt.user_id.hex, target_user_id=target_user_id)
 
     if cached_user:
@@ -292,7 +306,7 @@ async def update_profile_route(jwt: strictJwtDependency, session: DBSession, sch
 
 @users_router.patch(path="/profile/update/media", response_model=ProfileUpdateMediaSchema, status_code=200)
 async def update_profile_route(
-    jwt: strictJwtDependency, session: DBSession, avatar_file: Annotated[Optional[UploadFile], File()] = None, banner_file: Annotated[Optional[UploadFile], File()] = None
+        jwt: strictJwtDependency, session: DBSession, avatar_file: Annotated[Optional[UploadFile], File()] = None, banner_file: Annotated[Optional[UploadFile], File()] = None
 ):
     try:
         user: Optional[UserModel] = await session.get(UserModel, jwt.user_id)
@@ -310,12 +324,13 @@ async def update_profile_route(
             avatar_image_width, avatar_image_height = get_image_dimensions(image_bytes=avatar_bytes)
             if avatar_image_width != avatar_image_height:
                 raise ValidationException(detail="Width and height of the avatar image must be equal.")
-            if avatar_image_width > 1024:
+            if avatar_image_width > 2048:
                 raise ValidationException(detail="Avatar image dimensions exceeded limit 400x400px.")
-            if len(avatar_bytes) > 2 * 1024 * 1024:
+            if len(avatar_bytes) > 8 * 1024 * 1024:
                 raise ValidationException(detail="Avatar image size exceeded limit 2MB.")
 
-            avatar_object_name = f"users/{jwt.user_id.hex}/avatar.{avatar_file_extension}"
+            # avatar_object_name = f"users/{jwt.user_id.hex}/avatar.{avatar_file_extension}"
+            avatar_object_name = f"users/{jwt.user_id.hex}/{avatar_file.filename}"
             avatar_url: str = await put_object_to_minio(object_name=avatar_object_name, data=avatar_bytes, content_type=avatar_file.content_type)
             user.avatar_url = avatar_url
             await cache_manager.update_profile(user_id=user.id.hex, key="avatar_url", value=avatar_url)
@@ -334,7 +349,8 @@ async def update_profile_route(
             if len(banner_bytes) > 2 * 1024 * 1024:
                 raise ValidationException(detail="Banner image size exceeded limit 2MB.")
 
-            banner_object_name = f"users/{jwt.user_id.hex}/banner.{banner_file_extension}"
+            # banner_object_name = f"users/{jwt.user_id.hex}/banner.{banner_file_extension}"
+            banner_object_name = f"users/{jwt.user_id.hex}/{banner_file.filename}"
             banner_url: str = await put_object_to_minio(object_name=banner_object_name, data=banner_bytes, content_type=banner_file.content_type)
             user.banner_url = banner_url
             await cache_manager.update_profile(user_id=user.id.hex, key="banner_url", value=banner_url)
@@ -371,14 +387,20 @@ async def delete_profile_route(jwt: strictJwtDependency, session: DBSession):
 
 @users_router.post(path="/follow", response_model=ResultSchema, status_code=200)
 async def follow_route(jwt: strictJwtDependency, following_id: UUID):
-    if jwt.user_id == following_id:
-        raise ValidationException(detail="Are you piece of human shit! Cannot follow yourself")
+    try:
+        if jwt.user_id == following_id:
+            raise ValidationException(detail="Are you piece of human shit! Cannot follow yourself")
 
-    await cache_manager.add_follower(user_id=jwt.user_id.hex, following_id=following_id.hex)
+        await cache_manager.add_follower(user_id=jwt.user_id.hex, following_id=following_id.hex)
 
-    await add_follow_to_db.kiq(user_id=jwt.user_id, following_id=following_id)
+        await add_follow_to_db.kiq(user_id=jwt.user_id, following_id=following_id)
 
-    return {"ok": True}
+        return {"ok": True}
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=str(ve))
+    except Exception as e:
+        my_logger.exception(f"Exception while following, e: {e}")
+        raise HTTPException(status_code=500, detail="Server error occurred")
 
 
 @users_router.post(path="/unfollow", response_model=ResultSchema, status_code=200)
@@ -400,6 +422,28 @@ async def get_followers_route(jwt: strictJwtDependency):
 @users_router.get(path="/followings", status_code=200)
 async def get_followings_route(jwt: strictJwtDependency):
     return await cache_manager.get_following(user_id=jwt.user_id.hex)
+
+
+@users_router.get(path="/block-user-status", status_code=200)
+async def get_block_user_status(jwt: strictJwtDependency, blocked_id: UUID):
+    try:
+        return await cache_manager.get_block_status(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex)
+    except Exception as e:
+        my_logger.exception(f"Exception while blocking the user, e: {e}")
+        raise HTTPException(status_code=500, detail="We couldn't block the user.")
+
+
+@users_router.post(path="/toggle-block-user", response_model=ResultSchema, status_code=200)
+async def toggle_block_user(jwt: strictJwtDependency, blocked_id: UUID, symmetrical: bool = False):
+    try:
+        await cache_manager.toggle_block_user(blocker_id=jwt.user_id.hex, blocked_id=blocked_id.hex, symmetrical=symmetrical)
+        await toggle_block_user_task.kiq(blocker_id=jwt.user_id, blocked_id=blocked_id, symmetrical=symmetrical)
+        return {"ok": True}
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=str(ve))
+    except Exception as e:
+        my_logger.exception(f"Exception while blocking the user, e: {e}")
+        raise HTTPException(status_code=500, detail="We couldn't block the user.")
 
 
 @users_router.post(path="/auth/access", response_model=TokenSchema, status_code=200)

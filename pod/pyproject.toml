@@ -36,6 +36,14 @@ dependencies = [
     "taskiq[reload]",
     "taskiq_redis",
     "taskiq-fastapi",
+    "google-cloud-vision",
+    "google-cloud-translate",
+    # "google-cloud-storage",
+    "gcloud-aio-storage",
+    "nltk",
+    "spacy",
+    "pip",
+    "aioboto3>=15.1.0",
 ]
 
 [tool.pyright]
@@ -80,5 +88,7 @@ dev = [
     "isort",
     "loguru",
     "python-json-logger",
+    "types-aioboto3[essential]",
     "types-redis",
 ]
+

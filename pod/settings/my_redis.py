@@ -2,11 +2,10 @@ import json
 import math
 import time
 from datetime import UTC, date, datetime, timedelta, timezone
+from enum import Enum
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from apps.chats_app.schemas import (ChatMessageSchema, ChatResponseSchema,
-                                    ChatSchema, ParticipantSchema)
 from coredis import PureToken
 from coredis import Redis as SearchRedis
 from coredis.exceptions import ResponseError
@@ -14,6 +13,9 @@ from coredis.modules.response.types import SearchResult
 from coredis.modules.search import Field
 from redis.asyncio import Redis as CacheRedis
 from redis.asyncio.client import PubSub
+
+from apps.chats_app.schemas import (ChatMessageSchema, ChatResponseSchema,
+                                    ChatSchema, ParticipantSchema)
 from settings.my_config import get_settings
 from utility.my_enums import EngagementType
 from utility.my_logger import my_logger
@@ -54,8 +56,8 @@ async def redis_ready() -> bool:
     try:
         my_cache_redis_ping_result = await my_cache_redis.ping()
         my_search_redis_ping_result = await my_search_redis.ping()
-        my_logger.exception(f"my_cache_redis_ping_result: {my_cache_redis_ping_result}")
-        my_logger.exception(f"my_search_redis_ping_result: {my_search_redis_ping_result}")
+        my_logger.debug(f"my_cache_redis_ping_result: {my_cache_redis_ping_result}")
+        my_logger.debug(f"my_search_redis_ping_result: {my_search_redis_ping_result}")
         return True
     except Exception as e:
         my_logger.exception(f"redis_ready: {e}")
@@ -64,10 +66,6 @@ async def redis_ready() -> bool:
 
 async def initialize_redis_indexes() -> None:
     try:
-        my_logger.warning(f"redis_ready() starting...")
-        ready = await redis_ready()
-        my_logger.warning(f"redis_ready() done, ready? {ready}")
-
         my_logger.debug(f"creating index...")
         await my_search_redis.search.create(
             index=USER_INDEX_NAME, on=PureToken.HASH, schema=[Field("email", PureToken.TEXT), Field("username", PureToken.TEXT)], prefixes=["users:"]
@@ -115,9 +113,10 @@ class ChatCacheManager:
 
     async def create_chat(self, user_id: str, participant_id: str, chat_id: str, mapping: dict):
         last_message: dict = mapping.pop("last_message")
+        now_timestamp = datetime.now(UTC).timestamp()
         async with self.cache_redis.pipeline() as pipe:
-            pipe.zadd(name=f"users:{user_id}:chats", mapping={chat_id: datetime.now(UTC).timestamp()})
-            pipe.zadd(name=f"users:{participant_id}:chats", mapping={chat_id: datetime.now(UTC).timestamp()})
+            pipe.zadd(name=f"users:{user_id}:chats", mapping={chat_id: now_timestamp})
+            pipe.zadd(name=f"users:{participant_id}:chats", mapping={chat_id: now_timestamp})
             pipe.hset(name=f"chats:{chat_id}:meta", mapping=mapping)
             pipe.hset(name=f"chats:{chat_id}:last_message", mapping=last_message)
             pipe.sadd(f"chats:{chat_id}:participants", user_id, participant_id)
@@ -144,8 +143,6 @@ class ChatCacheManager:
                 pipe.smembers(f"chats:{chat_id}:participants")  # index 2, 5, 8...
             results = await pipe.execute()
 
-        my_logger.warning(f"results: {results}")
-
         chats: list[dict] = results[::3]  # Every 3rd element starting at 0
         last_messages: list[dict] = results[1::3]  # Every 3rd element starting at 1
         participant_sets: list[set[str]] = results[2::3]  # Every 3rd element starting at 2
@@ -166,7 +163,7 @@ class ChatCacheManager:
             piped_results = await pipe.execute()
 
         profiles: list[dict] = piped_results[: len(participant_ids)]
-        statuses: list[bool] = piped_results[len(participant_ids) :]
+        statuses: list[bool] = piped_results[len(participant_ids):]
 
         chat_list = []
         for chat_meta, last_msg, pid, profile, is_online in zip(chats, last_messages, participant_ids, profiles, statuses):
@@ -198,6 +195,9 @@ class ChatCacheManager:
 
     async def is_user_chat_owner(self, user_id: str, chat_id: str) -> bool:
         score: Optional[float] = await self.cache_redis.zscore(name=f"users:{user_id}:chats", value=chat_id)
+        my_logger.warning(f"user_id: {user_id}")
+        my_logger.warning(f"chat_id: {chat_id}")
+        my_logger.warning(f"score: {score}")
         return False if score is None else True
 
     async def is_online(self, participant_id: str) -> bool:
@@ -205,32 +205,57 @@ class ChatCacheManager:
 
     """ ****************************************** EVENTS ****************************************** """
 
-    async def add_user_to_chats(self, user_id: str) -> set[str]:
-        async with self.cache_redis.pipeline() as pipe:
-            pipe.sadd(f"chats:online", user_id)
-            pipe.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
-            results = await pipe.execute()
-        return results[1]
+    async def add_user_to_chats(self, user_id: str) -> tuple[set[str], set[str]]:
+        chat_ids: list[str] = await self.cache_redis.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
 
-    async def remove_user_from_chats(self, user_id: str) -> set[str]:
+        async with self.cache_redis.pipeline() as pipe:
+            pipe.sadd("chats:online", user_id)
+            for chat_id in chat_ids:
+                pipe.sinter(f"chats:{chat_id}:participants", "chats:online")
+            results = await pipe.execute()
+
+        online_participants: set[str] = set()
+        chat_ids_with_online: set[str] = set()
+        online_users_per_chat_results: list[set[str]] = results[1:]
+
+        for chat_id, online_in_chat in zip(chat_ids, online_users_per_chat_results):
+            other_online_users = {pid for pid in online_in_chat if pid != user_id}
+            if other_online_users:
+                chat_ids_with_online.add(chat_id)
+                online_participants.update(other_online_users)
+
+        return chat_ids_with_online, online_participants
+
+    async def remove_user_from_chats(self, user_id: str) -> tuple[set[str], set[str]]:
+        chat_ids: list[str] = await self.cache_redis.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
+
         async with self.cache_redis.pipeline() as pipe:
             pipe.srem(f"chats:online", user_id)
-            pipe.zrevrange(name=f"users:{user_id}:chats", start=0, end=-1)
             pipe.hset(f"users:{user_id}:profile", key="last_seen_at", value=int(datetime.now(UTC).timestamp()))
+            for chat_id in chat_ids:
+                pipe.sinter(f"chats:{chat_id}:participants", "chats:online")
             results = await pipe.execute()
-        return results[1]
 
-    async def add_typing(self, user_id: str, chat_id: str):
-        await self.cache_redis.sadd(f"typing:{chat_id}", user_id)
+        online_participants: set[str] = set()
+        chat_ids_with_online: set[str] = set()
+        online_users_per_chat_results: list[set[str]] = results[2:]
 
-    async def remove_typing(self, user_id: str, chat_id: str):
-        await self.cache_redis.srem(f"typing:{chat_id}", user_id)
+        for chat_id, online_in_chat in zip(chat_ids, online_users_per_chat_results):
+            other_online_users = {pid for pid in online_in_chat if pid != user_id}
+            if other_online_users:
+                chat_ids_with_online.add(chat_id)
+                online_participants.update(other_online_users)
 
-    async def get_chat_participants(self, chat_id: str) -> set[str]:
-        return await self.cache_redis.smembers(f"chats:{chat_id}:participants")
+        return chat_ids_with_online, online_participants
 
-    async def get_user_chat_ids(self, user_id: str) -> list[str]:
-        return await self.cache_redis.zrevrange(f"users:{user_id}:chats", start=0, end=-1)
+    async def get_chat_participants(self, chat_id: str, user_id: str | None = None, online: bool = False) -> set[str]:
+        if online:
+            participants = await self.cache_redis.sinter(f"chats:{chat_id}:participants", "chats:online")
+            if user_id:
+                participants.discard(user_id)
+            return participants
+        else:
+            return await self.cache_redis.smembers(f"chats:{chat_id}:participants")
 
 
 class CacheManager:
@@ -275,11 +300,142 @@ class CacheManager:
             feed_ids = await self.cache_redis.zrevrange(name=f"users:{user_id}:{prefix}", start=start, end=end)
         else:
             all_feed_ids: set[str] = await self.cache_redis.smembers(name=f"users:{user_id}:{prefix}")
-            feed_ids = list(all_feed_ids)[start : end + 1]
+            feed_ids = list(all_feed_ids)[start: end + 1]
             # feed_ids = await self.cache_redis.lrange(name=f"users:{user_id}:{prefix}", start=start, end=end)
 
         feeds: list[dict] = await self._get_feeds(user_id=user_id, feed_ids=feed_ids)
         return {"feeds": feeds, "end": total_count}
+
+    async def _get_feeds(self, feed_ids: list[str], user_id: Optional[str] = None) -> list[dict]:
+        feeds: list[dict] = []
+
+        # Fetch feed metadata
+        async with self.cache_redis.pipeline() as pipe:
+            for feed_id in feed_ids:
+                pipe.hgetall(f"feeds:{feed_id}:meta")
+            feed_metas: list[dict] = await pipe.execute()
+
+        # Process feed metadata and apply visibility filtering
+        valid_feeds = []
+        follower_check_authors = set()
+        author_feed_map = {}
+
+        # Process feed metadata
+        for feed_meta in feed_metas:
+            if not feed_meta:
+                continue
+
+            visibility = feed_meta.get("feed_visibility")
+            author_id = feed_meta.get("author_id")
+
+            # Public feeds always visible
+            if visibility == "public":
+                valid_feeds.append(feed_meta)
+
+            # Private feeds only visible to owner
+            elif visibility == "private":
+                if user_id and user_id == author_id:
+                    valid_feeds.append(feed_meta)
+
+            # Followers-only feeds
+            elif visibility == "followers":
+                if not user_id:
+                    continue  # Anonymous users can't see followers-only
+                if user_id == author_id:
+                    valid_feeds.append(feed_meta)  # Always visible to author
+                else:
+                    # Defer follower check
+                    follower_check_authors.add(author_id)
+                    author_feed_map.setdefault(author_id, []).append(feed_meta)
+
+        # Batch process follower checks
+        if follower_check_authors and user_id:
+            follow_status = await self._check_followers_batch(user_id, list(follower_check_authors))
+            for author_id, is_follower in follow_status.items():
+                if is_follower:
+                    valid_feeds.extend(author_feed_map[author_id])
+
+        feeds = valid_feeds
+        if not feeds:
+            return []
+
+        # Get all author IDs
+        author_ids = {feed["author_id"] for feed in feeds}
+
+        # 🛡️ Filter blocked authors
+        if user_id:
+            async with self.cache_redis.pipeline() as pipe:
+                for author_id in author_ids:
+                    pipe.sismember(f"users:{user_id}:blocked", author_id)
+                    pipe.sismember(f"users:{author_id}:blocked", user_id)
+                block_flags = await pipe.execute()
+
+            # Build block map
+            block_map = {}
+            for i, author_id in enumerate(author_ids):
+                blocked_by_user = bool(block_flags[i * 2])
+                blocked_user = bool(block_flags[i * 2 + 1])
+                block_map[author_id] = blocked_by_user or blocked_user
+
+            feeds = [feed for feed in feeds if not block_map.get(feed["author_id"], False)]
+
+            if not feeds:
+                return []
+
+        if not feeds:
+            return []
+
+        # Process engagement results
+        engagement_keys = ["comments", "reposts", "quotes", "likes", "views", "bookmarks"]
+        interaction_keys = ["reposted", "quoted", "liked", "viewed", "bookmarked"]
+
+        async with self.cache_redis.pipeline() as pipe:
+            for feed in feeds:
+                feed_id = feed["id"]
+                for key in engagement_keys:
+                    pipe.scard(f"feeds:{feed_id}:{key}")
+                if user_id:
+                    for key in engagement_keys[1:]:
+                        pipe.sismember(f"feeds:{feed_id}:{key}", user_id)
+            results = await pipe.execute()
+
+        for index, feed in enumerate(feeds):
+            has_interactions = user_id is not None
+            chunk_size = len(engagement_keys) + (len(interaction_keys) if has_interactions else 0)
+            start = index * chunk_size
+
+            metrics = results[start: start + len(engagement_keys)]
+            engagement = {key: value for key, value in zip(engagement_keys, metrics) if value > 0}
+
+            if has_interactions:
+                interactions: list[bool] = results[start + len(engagement_keys): start + chunk_size]
+                engagement.update({interaction_key: True for interaction_key, interacted in zip(interaction_keys, interactions) if interacted})
+
+            feed["engagement"] = engagement
+
+        # Fetch author profiles
+        author_ids = {feed["author_id"] for feed in feeds}
+        keys = ["id", "name", "username", "avatar_url"]
+
+        async with self.cache_redis.pipeline() as pipe:
+            for aid in author_ids:
+                pipe.hmget(f"users:{aid}:profile", keys)
+            profiles = await pipe.execute()
+
+        author_profiles = {profile[0]: dict(zip(keys, profile)) for profile in profiles if profile and profile[0]}
+
+        for feed in feeds:
+            feed["author"] = author_profiles.get(feed.pop("author_id"), {})
+
+        return feeds
+
+    async def _check_followers_batch(self, user_id: str, author_ids: list[str]) -> dict[str, bool]:
+        """Batch check if user follows multiple authors"""
+        async with self.cache_redis.pipeline() as pipe:
+            for author_id in author_ids:
+                pipe.sismember(f"users:{author_id}:followers", user_id)
+            results = await pipe.execute()
+        return {aid: result for aid, result in zip(author_ids, results)}
 
     """ ********************************************* FEED ********************************************* """
 
@@ -342,12 +498,10 @@ class CacheManager:
     async def update_feed(self, feed_id: str, key: str, value: Any):
         if value is None:
             await self.cache_redis.hdel(f"feeds:{feed_id}:meta", key)
-            return
         else:
-            if isinstance(value, list):
-                value = json.dumps(value)
+            if isinstance(value, Enum):
+                value = value.value
             await self.cache_redis.hset(name=f"feeds:{feed_id}:meta", key=key, value=value)
-            return
 
     async def delete_feed(self, author_id: str, feed_id: str):
         my_logger.warning(f"Deleting feed: author_id={author_id}, feed_id={feed_id}")
@@ -432,70 +586,17 @@ class CacheManager:
             prefix = "comments"
         return collected
 
-    async def _get_feeds(self, feed_ids: list[str], user_id: Optional[str] = None) -> list[dict]:
-        feeds: list[dict] = []
-
-        # Fetch feed metadata
-        async with self.cache_redis.pipeline() as pipe:
-            for feed_id in feed_ids:
-                pipe.hgetall(f"feeds:{feed_id}:meta")
-            feed_metas: list[dict] = await pipe.execute()
-
-        # Process feed metadata
-        for feed_meta in feed_metas:
-            if not feed_meta:
-                continue
-
-            feeds.append(feed_meta)
-
-        # Process engagement results
-        engagement_keys = ["comments", "reposts", "quotes", "likes", "views", "bookmarks"]
-        interaction_keys = ["reposted", "quoted", "liked", "viewed", "bookmarked"]
-
-        async with self.cache_redis.pipeline() as pipe:
-            for feed in feeds:
-                feed_id = feed["id"]
-                for key in engagement_keys:
-                    pipe.scard(f"feeds:{feed_id}:{key}")
-                if user_id:
-                    for key in engagement_keys[1:]:
-                        pipe.sismember(f"feeds:{feed_id}:{key}", user_id)
-            results = await pipe.execute()
-
-        for index, feed in enumerate(feeds):
-            has_interactions = user_id is not None
-            chunk_size = len(engagement_keys) + (len(interaction_keys) if has_interactions else 0)
-            start = index * chunk_size
-
-            metrics = results[start : start + len(engagement_keys)]
-            engagement = {key: value for key, value in zip(engagement_keys, metrics) if value > 0}
-
-            if has_interactions:
-                interactions: list[bool] = results[start + len(engagement_keys) : start + chunk_size]
-                engagement.update({interaction_key: True for interaction_key, interacted in zip(interaction_keys, interactions) if interacted})
-
-            feed["engagement"] = engagement
-
-        # Fetch author profiles
-        author_ids = {feed["author_id"] for feed in feeds}
-        keys = ["id", "name", "username", "avatar_url"]
-
-        async with self.cache_redis.pipeline() as pipe:
-            for aid in author_ids:
-                pipe.hmget(f"users:{aid}:profile", keys)
-            profiles = await pipe.execute()
-
-        author_profiles = {profile[0]: dict(zip(keys, profile)) for profile in profiles if profile and profile[0]}
-
-        for feed in feeds:
-            feed["author"] = author_profiles.get(feed.pop("author_id"), {})
-
-        return feeds
-
     """ ***************************************** INTERACTION ***************************************** """
 
     async def set_engagement(self, user_id: str, feed_id: str, engagement_type: EngagementType, is_comment: bool = False):
         engagement_key, user_key = _engagement_keys(feed_id=feed_id, user_id=user_id, engagement_type=engagement_type, is_comment=is_comment)
+
+        if engagement_type == EngagementType.reposts:
+            follower_ids = await cache_manager.get_followers(user_id=user_id)
+
+            async with cache_manager.cache_redis.pipeline() as pipe:
+                for fid in follower_ids:
+                    pipe.sadd(f"users:{fid}:following_timeline", feed_id)
 
         async with self.cache_redis.pipeline() as pipe:
             pipe.sadd(engagement_key, user_id)
@@ -633,6 +734,11 @@ class CacheManager:
 
                 # Delete feed metadata and stats
                 pipe.delete(f"feeds:{feed_id}:meta")
+
+                # remove from feeds:online & chats:online
+                pipe.srem("feeds:online", user_id)
+                pipe.srem("chats:online", user_id)
+
             await pipe.execute()
 
             for feed_id in feed_ids:
@@ -641,10 +747,76 @@ class CacheManager:
     async def get_profile_avatar_url(self, user_id: str) -> Optional[str]:
         return await self.cache_redis.hget(name=f"users:{user_id}:profile", key="avatar")
 
+    """ ****************************************** BLOCKING ****************************************** """
+
+    async def get_block_status(self, blocker_id: str, blocked_id: str) -> dict:
+        blocked_target = bool(await self.cache_redis.sismember(f"users:{blocker_id}:blocked", blocked_id))
+        blocked_by_target = bool(await self.cache_redis.sismember(f"users:{blocked_id}:blocked", blocker_id))
+        return {"blocked": blocked_target, "symmetrical": blocked_target and blocked_by_target}
+
+    async def toggle_block_user(self, blocker_id: str, blocked_id: str, symmetrical: bool = False):
+        is_already_blocked = await self.cache_redis.sismember(f"users:{blocker_id}:blocked", blocked_id)
+
+        blocker_follows_blocked = await self.cache_redis.sismember(f"users:{blocker_id}:followings", blocked_id)
+        blocked_follows_blocker = await self.cache_redis.sismember(f"users:{blocked_id}:followings", blocker_id)
+
+        blocked_user_feeds = await self.cache_redis.zrange(f"users:{blocked_id}:user_timeline", 0, -1) if blocker_follows_blocked else []
+        blocker_user_feeds = await self.cache_redis.zrange(f"users:{blocker_id}:user_timeline", 0, -1) if blocked_follows_blocker else []
+
+        async with self.cache_redis.pipeline() as pipe:
+            if is_already_blocked:
+                # 🔓 UNBLOCK logic
+                pipe.srem(f"users:{blocker_id}:blocked", blocked_id)
+
+                if symmetrical:
+                    pipe.srem(f"users:{blocked_id}:blocked", blocker_id)
+
+            else:
+                # 🚫 BLOCK logic
+                pipe.sadd(f"users:{blocker_id}:blocked", blocked_id)
+
+                # Remove blocker → blocked follow relation
+                if blocker_follows_blocked:
+                    pipe.srem(f"users:{blocker_id}:followers", blocked_id)
+                    pipe.srem(f"users:{blocked_id}:followings", blocker_id)
+                    pipe.hincrby(f"users:{blocked_id}:profile", "followers_count", -1)
+                    pipe.hincrby(f"users:{blocker_id}:profile", "followings_count", -1)
+                    if blocked_user_feeds:
+                        pipe.zrem(f"users:{blocker_id}:following_timeline", *blocked_user_feeds)
+
+                if symmetrical:
+                    pipe.sadd(f"users:{blocked_id}:blocked", blocker_id)
+
+                    # Remove blocked → blocker follow relation
+                    if blocked_follows_blocker:
+                        pipe.srem(f"users:{blocked_id}:followings", blocker_id)
+                        pipe.srem(f"users:{blocker_id}:followers", blocked_id)
+                        pipe.hincrby(f"users:{blocked_id}:profile", "followings_count", -1)
+                        pipe.hincrby(f"users:{blocker_id}:profile", "followers_count", -1)
+                        if blocker_user_feeds:
+                            pipe.zrem(f"users:{blocked_id}:following_timeline", *blocker_user_feeds)
+
+            await pipe.execute()
+
+    async def is_blocked_by_either(self, user_id: str, other_id: str) -> bool:
+        return await self.cache_redis.sismember(f"users:{user_id}:blocked", other_id) or await self.cache_redis.sismember(f"users:{other_id}:blocked", user_id)
+
+    async def is_symmetrical_block(self, user_id: str, other_id: str) -> bool:
+        return await self.cache_redis.sismember(f"users:{user_id}:blocked", other_id) and await self.cache_redis.sismember(f"users:{other_id}:blocked", user_id)
+
         # ******************************************************************** FOLLOW MANAGEMENT ********************************************************************
 
     async def add_follower(self, user_id: str, following_id: str, max_ft: int = 120):
+        blocked_by_target = await self.cache_redis.sismember(f"users:{following_id}:blocked", user_id)
+        blocks_target = await self.cache_redis.sismember(f"users:{user_id}:blocked", following_id)
+
+        if blocked_by_target:
+            raise ValueError("You are blocked by this user and cannot follow them.")
+        if blocks_target:
+            raise ValueError("You have blocked this user. Unblock them first to follow.")
+
         following_feed_ids: list[tuple[str, float]] = await self.cache_redis.zrange(name=f"users:{following_id}:user_timeline", start=0, end=-1, withscores=True)
+
         async with self.cache_redis.pipeline() as pipe:
             pipe.sadd(f"users:{following_id}:followers", user_id)
             pipe.sadd(f"users:{user_id}:followings", following_id)
@@ -767,6 +939,7 @@ class CacheManager:
         return await self.cache_redis.scard(name=f"feeds:{feed_id}:comments")
 
     async def incr_statistics(self):
+        my_logger.error("I'm incrementing stats!!!")
         today_date = date.today().isoformat()
         await self.cache_redis.hincrby(name="statistics", key=today_date)
 

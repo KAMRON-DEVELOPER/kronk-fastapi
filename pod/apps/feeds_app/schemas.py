@@ -3,6 +3,7 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
+
 from utility.my_enums import CommentPolicy, FeedVisibility
 
 
@@ -52,7 +53,9 @@ class FeedSchema(BaseModel):
     body: str
     author: AuthorSchema
     video_url: Optional[str] = None
+    video_aspect_ratio: Optional[float] = None
     image_url: Optional[str] = None
+    image_aspect_ratio: Optional[float] = None
     scheduled_at: Optional[datetime] = None
     feed_visibility: FeedVisibility
     comment_policy: CommentPolicy
@@ -70,3 +73,16 @@ class FeedSchema(BaseModel):
 class FeedResponseSchema(BaseModel):
     feeds: list[FeedSchema]
     end: int
+
+
+class ReportOut(BaseModel):
+    copyright_infringement: bool = False
+    spam: bool = False
+    nudity_or_sexual_content: bool = False
+    misinformation: bool = False
+    harassment_or_bullying: bool = False
+    hate_speech: bool = False
+    violence_or_threats: bool = False
+    self_harm_or_suicide: bool = False
+    impersonation: bool = False
+    other: bool = False

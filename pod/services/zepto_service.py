@@ -1,4 +1,5 @@
 import aiohttp
+
 from settings.my_config import get_settings
 
 
@@ -7,14 +8,14 @@ class ZeptoMail:
     HEADERS = {"accept": "application/json", "content-type": "application/json", "authorization": f"Zoho-enczapikey {get_settings().EMAIL_SERVICE_API_KEY}"}
 
     @staticmethod
-    async def send_email(to_email: str, username: str, code: str = "0000", for_reset_password: bool = False, for_thanks_signing_up: bool = False):
+    async def send_email(to_email: str, username: str, code: str = "0000", for_forgot_password: bool = False, for_thanks_signing_up: bool = False):
         payload = {
             "template_alias": "kronk-verification-key-alias",
             "from": {"address": "verify@kronk.uz", "name": "verify"},
             "to": [{"email_address": {"name": username, "address": to_email}}],
             "merge_info": {"code": code, "username": username},
         }
-        if for_reset_password:
+        if for_forgot_password:
             payload.update({"template_alias": "kronk-password-reset-key-alias", "from": {"address": "reset@kronk.uz", "name": "reset"}})
         if for_thanks_signing_up:
             payload.update({"template_alias": "kronk-thanks-for-signing-up-key-alias", "from": {"address": "thanks@kronk.uz", "name": "thanks"}})

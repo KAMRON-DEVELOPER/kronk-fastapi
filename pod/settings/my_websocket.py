@@ -8,6 +8,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
+
 from settings.my_redis import my_cache_redis, pubsub_manager
 from utility.my_enums import ChatEvent
 from utility.my_logger import my_logger
@@ -65,7 +66,8 @@ class WebSocketManager:
     async def send_personal_message(self, user_id: str, data: dict):
         ws: Optional[WebSocket] = self.authorized_connections.get(user_id)
         if ws is None:
-            my_logger.exception(f"Websocket connection not exists with {user_id}")
+            my_logger.warning(f"WebSocket not found for user_id={user_id}. Skipping send.")
+            return
 
         try:
             await ws.send_json(data=data)
@@ -87,13 +89,13 @@ class WebSocketManager:
 
 class WebSocketContextManager:
     def __init__(
-        self,
-        websocket: WebSocket,
-        connect_handler: Callable[[str, WebSocket], Awaitable[None]],
-        disconnect_handler: Callable[[str, WebSocket], Awaitable[None]],
-        pubsub_generator: Callable[[str], Awaitable[PubSub]],
-        message_handlers: dict[ChatEvent, Callable[[str, dict], Awaitable[None]]],
-        user_id: Optional[str] = None,
+            self,
+            websocket: WebSocket,
+            connect_handler: Callable[[str, WebSocket], Awaitable[None]],
+            disconnect_handler: Callable[[str, WebSocket], Awaitable[None]],
+            pubsub_generator: Callable[[str], Awaitable[PubSub]],
+            message_handlers: dict[ChatEvent, Callable[[str, dict], Awaitable[None]]],
+            user_id: Optional[str] = None,
     ):
         self.websocket = websocket
         self.user_id = user_id
@@ -158,7 +160,7 @@ class WebSocketContextManager:
                     continue
 
                 pubsub_data = message.get("data")
-                my_logger.warning(f"pubsub_data in (async for message in self.pubsub.listen()) in (_pubsub_listener): {pubsub_data}, type: {type(pubsub_data)}")
+                my_logger.warning(f"pubsub_data in _pubsub_listener: {pubsub_data}, type: {type(pubsub_data)}")
                 if pubsub_data is None:
                     continue
 
@@ -174,6 +176,7 @@ class WebSocketContextManager:
                 if event_type is None:
                     my_logger.warning(f"Missing 'type' field in event data: {data}")
                     await self.websocket.send_json({"detail": "Missing event type in pubsub message."})
+                    # await chat_ws_manager.send_personal_message(user_id="", data={"detail": "Missing event type in pubsub message."}) # TODO
                     continue
 
                 try:
@@ -258,17 +261,3 @@ settings_ws_manager = WebSocketManager(redis=my_cache_redis)
 home_timeline_ws_manager = WebSocketManager(redis=my_cache_redis)
 
 chat_ws_manager = WebSocketManager(redis=my_cache_redis)
-
-
-@chat_ws_manager.on("typing_start")
-async def typing_start(data: dict):
-    chat_id = data["chat_id"]
-    user_id = data["user_id"]
-    await chat_ws_manager.broadcast(data={"type": "typing_start", "chat_id": chat_id, "user_id": user_id}, user_ids=[])
-
-
-@chat_ws_manager.on("typing_stop")
-async def typing_stop(data: dict):
-    chat_id = data["chat_id"]
-    user_id = data["user_id"]
-    await chat_ws_manager.broadcast(data={"type": "typing_stop", "chat_id": chat_id, "user_id": user_id}, user_ids=[])

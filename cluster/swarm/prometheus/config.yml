@@ -7,15 +7,15 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # Create a job for Docker Swarm containers.
-  - job_name: "_job"
-    tls_config:
-      ca_file: /run/secrets/ca-cert
-      cert_file: /run/secrets/client-cert
-      key_file: /run/secrets/client-key
+  # FIRST
+  - job_name: "swarm_job"
+    # tls_config:
+    #   ca_file: /run/secrets/ca.pem
+    #   cert_file: /run/secrets/docker-client-cert.pem
+    #   key_file: /run/secrets/docker-client-key.pem
 
     dockerswarm_sd_configs:
-      - host: "tcp://178.212.35.106:2375" # unix:///var/run/docker.sock
+      - host: "unix:///var/run/docker.sock"
         role: tasks
     relabel_configs:
       # Only keep containers that should be running.
@@ -33,3 +33,49 @@ scrape_configs:
       - source_labels: [__address__]
         regex: 10\..*
         action: drop
+
+    # SECOND
+  - job_name: "docker_job"
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: nodes
+    relabel_configs:
+      # Fetch metrics on port 9323.
+      - source_labels: [__meta_dockerswarm_node_address]
+        target_label: __address__
+        replacement: $1:9323
+      # Set labels
+      - source_labels: [__meta_dockerswarm_node_label_node_name]
+        target_label: node_name
+      - source_labels: [__meta_dockerswarm_node_hostname]
+        target_label: instance
+
+  - job_name: "node_job"
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: nodes
+    relabel_configs:
+      # Fetch metrics on port 8080.
+      - source_labels: [__meta_dockerswarm_node_address]
+        target_label: __address__
+        replacement: $1:9100
+      # Set labels
+      - source_labels: [__meta_dockerswarm_node_label_node_name]
+        target_label: node_name
+      - source_labels: [__meta_dockerswarm_node_hostname]
+        target_label: instance
+
+  - job_name: "cadvisor_job"
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: nodes
+    relabel_configs:
+      # Fetch metrics on port 8080.
+      - source_labels: [__meta_dockerswarm_node_address]
+        target_label: __address__
+        replacement: $1:8080
+      # Set labels
+      - source_labels: [__meta_dockerswarm_node_label_node_name]
+        target_label: node_name
+      - source_labels: [__meta_dockerswarm_node_hostname]
+        target_label: instance

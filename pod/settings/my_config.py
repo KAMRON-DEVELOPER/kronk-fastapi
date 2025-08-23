@@ -2,12 +2,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+import spacy
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from utility.my_logger import my_logger
 
 
 class Settings(BaseSettings):
+    DEBUG: bool = True
+
     BASE_DIR: Path = Path(__file__).parent.parent.resolve()
     TEMP_IMAGES_FOLDER_PATH: Path = BASE_DIR / "static/images"
     TEMP_VIDEOS_FOLDER_PATH: Path = BASE_DIR / "static/videos"
@@ -32,6 +34,12 @@ class Settings(BaseSettings):
     FIREBASE_ADMINSDK: Optional[str] = None
     FIREBASE_ADMINSDK_PATH: Path = BASE_DIR / "certs/kronk-production-firebase-adminsdk.json"
 
+    # FIREBASE ADMIN SDK
+    GCP_PROJECT_ID: str = "1081239849482"
+    GCS_BUCKET_NAME: str = "kronk-gcs-bucket"
+    GCP_CREDENTIALS: Optional[str] = None
+    GCP_CREDENTIALS_PATH: Path = BASE_DIR / "certs/kronk-production-gcp-credentials.json"
+
     # S3
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_KEY: str = ""
@@ -48,20 +56,26 @@ class Settings(BaseSettings):
     # EMAIL
     EMAIL_SERVICE_API_KEY: str = ""
 
+    # LINGVANEX
+    LINGVANEX_API_KEY: str = ""
+
     @model_validator(mode="after")
     def inject_secret_file_paths(self):
-        # If the value is the content (Docker secret), infer the path
         secret_base = Path("/run/secrets")
-        if not self.FIREBASE_ADMINSDK_PATH and (secret_base / "FIREBASE_ADMINSDK").exists():
+
+        if self.FIREBASE_ADMINSDK:
             self.FIREBASE_ADMINSDK_PATH = secret_base / "FIREBASE_ADMINSDK"
 
-        if not self.CA_PATH and (secret_base / "CA").exists():
+        if self.GCP_CREDENTIALS:
+            self.GCP_CREDENTIALS_PATH = secret_base / "GCP_CREDENTIALS"
+
+        if self.CA:
             self.CA_PATH = secret_base / "CA"
 
-        if not self.FASTAPI_CLIENT_CERT_PATH and (secret_base / "FASTAPI_CLIENT_CERT").exists():
+        if self.FASTAPI_CLIENT_CERT:
             self.FASTAPI_CLIENT_CERT_PATH = secret_base / "FASTAPI_CLIENT_CERT"
 
-        if not self.FASTAPI_CLIENT_KEY_PATH and (secret_base / "FASTAPI_CLIENT_KEY").exists():
+        if self.FASTAPI_CLIENT_KEY:
             self.FASTAPI_CLIENT_KEY_PATH = secret_base / "FASTAPI_CLIENT_KEY"
 
         return self
@@ -71,41 +85,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings():
-    s = Settings()
+    return Settings()
 
-    my_logger.warning("🔧 get_settings(): Loaded configuration values...\n")
 
-    # General
-    my_logger.warning(f"BASE_DIR: {s.BASE_DIR}")
-    my_logger.warning(f"TEMP_IMAGES_FOLDER_PATH: {s.TEMP_IMAGES_FOLDER_PATH}")
-    my_logger.warning(f"TEMP_VIDEOS_FOLDER_PATH: {s.TEMP_VIDEOS_FOLDER_PATH}")
-
-    # DATABASE
-    my_logger.warning(f"DATABASE_URL: {s.DATABASE_URL}\n")
-
-    # REDIS & TASKIQ
-    my_logger.warning(f"CA_PATH: {str(s.BASE_DIR / s.CA_PATH)}")
-    my_logger.warning(f"FASTAPI_CLIENT_CERT_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_CERT_PATH)}")
-    my_logger.warning(f"FASTAPI_CLIENT_KEY_PATH: {str(s.BASE_DIR / s.FASTAPI_CLIENT_KEY_PATH)}")
-    my_logger.warning(f"REDIS_HOST: {s.REDIS_HOST}\n")
-
-    # FIREBASE
-    my_logger.warning(f"FIREBASE_ADMINSDK_PATH: {s.FIREBASE_ADMINSDK_PATH}\n")
-
-    # S3
-    my_logger.warning(f"S3_ACCESS_KEY_ID: {s.S3_ACCESS_KEY_ID}")
-    my_logger.warning(f"S3_SECRET_KEY: {s.S3_SECRET_KEY[:4]}{'*' * (len(s.S3_SECRET_KEY) - 4) if s.S3_SECRET_KEY else ''}")
-    my_logger.warning(f"S3_ENDPOINT: {s.S3_ENDPOINT}")
-    my_logger.warning(f"S3_REGION: {s.S3_REGION}")
-    my_logger.warning(f"S3_BUCKET_NAME: {s.S3_BUCKET_NAME}\n")
-
-    # JWT
-    my_logger.warning(f"SECRET_KEY: {s.SECRET_KEY[:4]}{'*' * (len(s.SECRET_KEY) - 4) if s.SECRET_KEY else ''}")
-    my_logger.warning(f"ALGORITHM: {s.ALGORITHM}")
-    my_logger.warning(f"ACCESS_TOKEN_EXPIRE_TIME: {s.ACCESS_TOKEN_EXPIRE_TIME}")
-    my_logger.warning(f"REFRESH_TOKEN_EXPIRE_TIME: {s.REFRESH_TOKEN_EXPIRE_TIME}\n")
-
-    # EMAIL
-    my_logger.warning(f"EMAIL_SERVICE_API_KEY: {s.EMAIL_SERVICE_API_KEY[:4]}{'*' * (len(s.EMAIL_SERVICE_API_KEY) - 4) if s.EMAIL_SERVICE_API_KEY else ''}\n")
-
-    return s
+@lru_cache(maxsize=1)
+def get_nlp():
+    return spacy.load("en_core_web_sm")

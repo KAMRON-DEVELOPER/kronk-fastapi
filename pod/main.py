@@ -1,25 +1,31 @@
+import logging
 from contextlib import asynccontextmanager
 
+import nltk
 import taskiq_fastapi
-from apps.admin_app.routes import admin_router
-from apps.admin_app.ws import admin_ws_router
-from apps.chats_app.routes import chats_router
-from apps.chats_app.ws import chat_ws_router
-from apps.feeds_app.routes import feed_router
-from apps.feeds_app.ws import feed_ws_router
-from apps.users_app.routes import users_router
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from prometheus_fastapi_instrumentator import Instrumentator
+from starlette.staticfiles import StaticFiles
+
+from apps.admin_app.ws import admin_ws_router
+from apps.chats_app.routes import chats_router
+from apps.chats_app.ws import chat_ws_router
+from apps.feeds_app.routes import feed_router
+from apps.feeds_app.ws import feed_ws_router
+from apps.notes_app.routes import notes_router
+from apps.users_app.routes import users_router
+from apps.vocabularies_app.routes import vocabularies_router
 from services.firebase_service import initialize_firebase
+from settings.my_boto3 import initialize_boto3
 from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
-from settings.my_redis import initialize_redis_indexes
+from settings.my_minio import initialize_minio
+from settings.my_redis import initialize_redis_indexes, cache_manager
 from settings.my_taskiq import broker
-from starlette.staticfiles import StaticFiles
 from utility.my_logger import my_logger
 
 settings = get_settings()
@@ -30,57 +36,31 @@ async def app_lifespan(_app: FastAPI):
     my_logger.warning("🚀 Starting app_lifespan...")
 
     try:
-        my_logger.warning("🧪 init redis...")
-        await initialize_redis_indexes()
-        my_logger.warning("✅ redis ready")
-    except Exception as e:
-        my_logger.exception(f"❌ Redis init failed, e: {e}")
-
-    try:
-        my_logger.warning("🧪 init db...")
-        await initialize_db()
-        my_logger.warning("✅ db ready")
-    except Exception as e:
-        my_logger.exception(f"❌ DB init failed, e: {e}")
-
-    try:
-        my_logger.warning("🧪 init firebase...")
+        nltk.download("punkt_tab")
         initialize_firebase()
-        my_logger.warning("✅ firebase ready")
-    except Exception as e:
-        my_logger.exception(f"❌ Firebase init failed, e: {e}")
-
-    try:
+        await initialize_redis_indexes()
+        await initialize_db()
+        await initialize_minio()
+        await initialize_boto3()
         instrumentator.expose(_app)
-    except Exception as e:
-        my_logger.exception(f"❌ Prometheus expose failed, e: {e}")
-
-    try:
         if not broker.is_worker_process:
-            my_logger.warning("🔄 Starting broker...")
             await broker.startup()
-            my_logger.warning("✅ Broker ready")
     except Exception as e:
-        my_logger.exception(f"❌ Broker startup failed, e: {e}")
-
+        my_logger.exception(f"Exception in app_lifespan startup, e: {e}")
     yield
 
     try:
         if not broker.is_worker_process:
-            my_logger.warning("🔻 Shutting down broker...")
             await broker.shutdown()
-            my_logger.warning("✅ Broker shutdown complete")
     except Exception as e:
-        my_logger.exception(f"❌ Broker shutdown failed, e: {e}")
+        my_logger.exception(f"Exception in app_lifespan shutdown, e: {e}")
 
 
 app: FastAPI = FastAPI(lifespan=app_lifespan)
 instrumentator = Instrumentator().instrument(app)
-
 taskiq_fastapi.init(broker=broker, app_or_path=app)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 templates = Jinja2Templates(directory="static/templates")
 
 
@@ -94,21 +74,56 @@ async def favicon():
     return FileResponse("static/favicon.ico")
 
 
+@app.get("/terms", response_class=HTMLResponse, include_in_schema=False)
+async def terms_of_service(request: Request):
+    return templates.TemplateResponse("terms_of_service.html", {"request": request})
+
+
 @app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)
 async def privacy_policy(request: Request):
     return templates.TemplateResponse("privacy_policy.html", {"request": request})
 
 
-@app.get("/terms", response_class=HTMLResponse, include_in_schema=False)
-async def terms_of_service(request: Request):
-    return templates.TemplateResponse("terms_of_service.html", {"request": request})
+@app.get("/safety", response_class=HTMLResponse, include_in_schema=False)
+async def safety(request: Request):
+    return templates.TemplateResponse("safety.html", {"request": request})
+
+
+@app.get("/account-deletion-info", response_class=HTMLResponse, include_in_schema=False)
+async def account_deletion_info(request: Request):
+    return templates.TemplateResponse("account_deletion_info.html", {"request": request})
+
+
+@app.get("/support", response_class=HTMLResponse, include_in_schema=False)
+async def support_page(request: Request):
+    return templates.TemplateResponse("support.html", {"request": request})
+
+
+@app.get("/guidelines", response_class=HTMLResponse, include_in_schema=False)
+async def support_page(request: Request):
+    return templates.TemplateResponse("community_guidelines.html", {"request": request})
+
+
+@app.get("/show-support-buttons")
+async def get_show_support_buttons():
+    if not await cache_manager.cache_redis.exists("show_support_buttons"):
+        await cache_manager.cache_redis.set(name="show_support_buttons", value=0)
+    return {"show_support_buttons": await cache_manager.cache_redis.get(name="show_support_buttons") == "1"}
+
+
+@app.post("/show-support-buttons")
+async def set_show_support_buttons():
+    value = "0" if await cache_manager.cache_redis.get(name="show_support_buttons") == "1" else "1"
+    await cache_manager.cache_redis.set(name="show_support_buttons", value=value)
+    return {"show_support_buttons": value == "1"}
 
 
 # HTTP Routes
 app.include_router(router=users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(router=feed_router, prefix="/api/v1/feeds", tags=["feeds"])
 app.include_router(router=chats_router, prefix="/api/v1/chats", tags=["chats"])
-app.include_router(router=admin_router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(router=vocabularies_router, prefix="/api/v1/vocabularies", tags=["vocabularies"])
+app.include_router(router=notes_router, prefix="/api/v1/notes", tags=["notes"])
 
 # Websocket Routes
 app.include_router(router=admin_ws_router, prefix="/api/v1/admin", tags=["admin ws"])
@@ -140,3 +155,11 @@ async def validation_exception_handler(request: Request, exception: RequestValid
 
     my_logger.warning(f"HTTP validation error during {request.method} {request.url.path}, details: {details}")
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"details": details})
+
+
+class MetricsFilter(logging.Filter):
+    def filter(self, record):
+        return "/metrics" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(MetricsFilter())
