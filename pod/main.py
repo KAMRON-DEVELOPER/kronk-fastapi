@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import nltk
 import taskiq_fastapi
@@ -22,7 +23,7 @@ from settings.my_config import get_settings
 from settings.my_database import initialize_db
 from settings.my_exceptions import ApiException
 from settings.my_minio import initialize_minio
-from settings.my_redis import initialize_redis_indexes
+from settings.my_redis import initialize_redis_indexes, cache_manager
 from settings.my_taskiq import broker
 from utility.my_logger import my_logger
 
@@ -59,9 +60,15 @@ instrumentator = Instrumentator().instrument(app)
 taskiq_fastapi.init(broker=broker, app_or_path=app)
 
 
-@app.get(path="/", tags=["root"])
+@app.get(path="/api/v1", tags=["root"])
 async def root() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/v1/show-support-buttons")
+async def get_show_support_buttons():
+    show_support_buttons: Optional[str] = await cache_manager.cache_redis.get(name="show_support_buttons")
+    return {"show_support_buttons": bool(int(show_support_buttons)) if show_support_buttons is not None else False}
 
 
 # HTTP Routes

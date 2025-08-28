@@ -16,13 +16,13 @@ class Settings(BaseSettings):
 
     # SSL/TLS PROD
     CA: Optional[str] = None
-    FASTAPI_CLIENT_CERT: Optional[str] = None
-    FASTAPI_CLIENT_KEY: Optional[str] = None
+    CLIENT_CERT: Optional[str] = None
+    CLIENT_KEY: Optional[str] = None
 
     # SSL/TLS DEV
-    CA_PATH: Path = BASE_DIR / "certs/ca.pem"
-    FASTAPI_CLIENT_CERT_PATH: Path = BASE_DIR / "certs/fastapi-client-cert.pem"
-    FASTAPI_CLIENT_KEY_PATH: Path = BASE_DIR / "certs/fastapi-client-key.pem"
+    CA_PATH: Path = BASE_DIR / "certs/ca/ca.pem"
+    FASTAPI_CLIENT_CERT_PATH: Path = BASE_DIR / "certs/client/client-cert.pem"
+    FASTAPI_CLIENT_KEY_PATH: Path = BASE_DIR / "certs/client/client-key.pem"
 
     # DATABASE
     DATABASE_URL: str = ""
@@ -70,13 +70,13 @@ class Settings(BaseSettings):
             self.GCP_CREDENTIALS_PATH = secret_base / "GCP_CREDENTIALS"
 
         if self.CA:
-            self.CA_PATH = secret_base / "CA"
+            self.CA_PATH = secret_base / "ca.pem"
 
-        if self.FASTAPI_CLIENT_CERT:
-            self.FASTAPI_CLIENT_CERT_PATH = secret_base / "FASTAPI_CLIENT_CERT"
+        if self.CLIENT_CERT:
+            self.FASTAPI_CLIENT_CERT_PATH = secret_base / "client_cert.pem"
 
-        if self.FASTAPI_CLIENT_KEY:
-            self.FASTAPI_CLIENT_KEY_PATH = secret_base / "FASTAPI_CLIENT_KEY"
+        if self.CLIENT_KEY:
+            self.FASTAPI_CLIENT_KEY_PATH = secret_base / "client_key.pem"
 
         return self
 
