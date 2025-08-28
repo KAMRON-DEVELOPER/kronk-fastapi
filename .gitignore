@@ -21,3 +21,4 @@ certs/kronk-production-gcp-credentials.json
 
 # Ignore everything in certs (optional)
  certs/
+pod/certs/
