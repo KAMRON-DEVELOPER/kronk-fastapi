@@ -20,5 +20,4 @@ pod/certs/kronk-production-firebase-adminsdk.json
 pod/certs/kronk-production-gcp-credentials.json
 
 # Ignore everything in certs (optional)
- certs/
 pod/certs/
