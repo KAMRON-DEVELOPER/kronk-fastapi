@@ -31,8 +31,8 @@ my_cache_redis: CacheRedis = CacheRedis(
     auto_close_connection_pool=True,
     ssl=True,
     ssl_ca_certs=str(settings.CA_PATH),
-    ssl_certfile=str(settings.FASTAPI_CLIENT_CERT_PATH),
-    ssl_keyfile=str(settings.FASTAPI_CLIENT_KEY_PATH),
+    ssl_certfile=str(settings.CLIENT_CERT_PATH),
+    ssl_keyfile=str(settings.CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
     ssl_check_hostname=True,
 )
@@ -42,8 +42,8 @@ my_search_redis: SearchRedis = SearchRedis(
     decode_responses=True,
     ssl=True,
     ssl_ca_certs=str(settings.CA_PATH),
-    ssl_certfile=str(settings.FASTAPI_CLIENT_CERT_PATH),
-    ssl_keyfile=str(settings.FASTAPI_CLIENT_KEY_PATH),
+    ssl_certfile=str(settings.CLIENT_CERT_PATH),
+    ssl_keyfile=str(settings.CLIENT_KEY_PATH),
     ssl_cert_reqs="required",
     ssl_check_hostname=True,
 )
@@ -697,7 +697,7 @@ class CacheManager:
         async with self.cache_redis.pipeline() as pipe:
             key = target_user_id or user_id
             pipe.hgetall(name=f"users:{key}:profile")
-            if target_user_id is not None:
+            if target_user_id != user_id and target_user_id is not None:
                 pipe.sismember(name=f"users:{user_id}:followings", value=target_user_id)
             results = await pipe.execute()
 

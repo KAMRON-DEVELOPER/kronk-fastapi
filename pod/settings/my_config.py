@@ -21,8 +21,8 @@ class Settings(BaseSettings):
 
     # SSL/TLS DEV
     CA_PATH: Path = BASE_DIR / "certs/ca/ca.pem"
-    FASTAPI_CLIENT_CERT_PATH: Path = BASE_DIR / "certs/client/client-cert.pem"
-    FASTAPI_CLIENT_KEY_PATH: Path = BASE_DIR / "certs/client/client-key.pem"
+    CLIENT_CERT_PATH: Path = BASE_DIR / "certs/client/client-cert.pem"
+    CLIENT_KEY_PATH: Path = BASE_DIR / "certs/client/client-key.pem"
 
     # DATABASE
     DATABASE_URL: str = ""
@@ -73,10 +73,10 @@ class Settings(BaseSettings):
             self.CA_PATH = secret_base / "ca.pem"
 
         if self.CLIENT_CERT:
-            self.FASTAPI_CLIENT_CERT_PATH = secret_base / "client_cert.pem"
+            self.CLIENT_CERT_PATH = secret_base / "client_cert.pem"
 
         if self.CLIENT_KEY:
-            self.FASTAPI_CLIENT_KEY_PATH = secret_base / "client_key.pem"
+            self.CLIENT_KEY_PATH = secret_base / "client_key.pem"
 
         return self
 
@@ -85,9 +85,23 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings():
-    return Settings()
+    settings = Settings()
+
+    print(f"DATABASE_URL: ${settings.DATABASE_URL}")
+    print(f"REDIS_HOST: ${settings.REDIS_HOST}")
+    print(f"CA_PATH: ${settings.CA_PATH}")
+    print(f"CLIENT_CERT_PATH: ${settings.CLIENT_CERT_PATH}")
+    print(f"CLIENT_KEY_PATH: ${settings.CLIENT_KEY_PATH}")
+    print(f"CA: ${settings.CA}")
+    print(f"CLIENT_CERT: ${settings.CLIENT_CERT}")
+    print(f"CLIENT_KEY: ${settings.CLIENT_KEY}")
+
+    return settings
 
 
 @lru_cache(maxsize=1)
 def get_nlp():
     return spacy.load("en_core_web_sm")
+
+
+get_settings()

@@ -48,7 +48,7 @@ class UserModel(BaseModel):
     __tablename__ = "user_table"
 
     name: Mapped[str] = mapped_column(String(length=64), nullable=False, index=True, unique=True)
-    username: Mapped[str] = mapped_column(String(length=64), nullabel=False, index=True, unique=True)
+    username: Mapped[str] = mapped_column(String(length=64), nullable=False, index=True, unique=True)
     email: Mapped[str] = mapped_column(String(length=64), nullabel=False, index=True, unique=True)
     phone_number: Mapped[Optional[str]] = mapped_column(String(length=64), nullable=True, unique=True)
     password: Mapped[str] = mapped_column(String(length=120))

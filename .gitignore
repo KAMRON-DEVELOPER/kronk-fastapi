@@ -16,9 +16,8 @@ service/volumes/minio_storage
 */__pycache__
 
 # Ignore Firebase Admin SDK & GCP credentials
-certs/kronk-production-firebase-adminsdk.json
-certs/kronk-production-gcp-credentials.json
+pod/certs/kronk-production-firebase-adminsdk.json
+pod/certs/kronk-production-gcp-credentials.json
 
 # Ignore everything in certs (optional)
- certs/
 pod/certs/
