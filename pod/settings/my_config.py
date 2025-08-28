@@ -85,18 +85,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings():
-    settings = Settings()
 
-    print(f"DATABASE_URL: ${settings.DATABASE_URL}")
-    print(f"REDIS_HOST: ${settings.REDIS_HOST}")
-    print(f"CA_PATH: ${settings.CA_PATH}")
-    print(f"CLIENT_CERT_PATH: ${settings.CLIENT_CERT_PATH}")
-    print(f"CLIENT_KEY_PATH: ${settings.CLIENT_KEY_PATH}")
-    print(f"CA: ${settings.CA}")
-    print(f"CLIENT_CERT: ${settings.CLIENT_CERT}")
-    print(f"CLIENT_KEY: ${settings.CLIENT_KEY}")
-
-    return settings
+    return  Settings()
 
 
 @lru_cache(maxsize=1)
