@@ -24,3 +24,12 @@ pod/certs/kronk-production-gcp-credentials.json
 # Ignore everything in certs (optional)
 certs/
 pod/certs/
+
+# Don't push any key and secrets
+*.crt
+*.key
+*.pem
+*.cer
+*.pfx
+*.p12
+
