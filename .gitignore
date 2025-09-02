@@ -26,6 +26,8 @@ certs/
 pod/certs/
 
 # Don't push any key and secrets
+*firebase-adminsdk.json
+credentials.json
 *.crt
 *.key
 *.pem
