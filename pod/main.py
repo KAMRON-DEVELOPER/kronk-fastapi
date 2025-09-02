@@ -33,19 +33,32 @@ settings = get_settings()
 @asynccontextmanager
 async def app_lifespan(_app: FastAPI):
     my_logger.warning("🚀 Starting app_lifespan...")
+    nltk.download("punkt_tab")
+    await initialize_redis_indexes()
 
     try:
-        nltk.download("punkt_tab")
         initialize_firebase()
-        await initialize_redis_indexes()
+    except Exception as e:
+        my_logger.exception(f"Firebase initialization exception, e: {e}")
+
+    try:
         await initialize_db()
+    except Exception as e:
+        my_logger.exception(f"DB initialization exception, e: {e}")
+
+    try:
         await initialize_minio()
+    except Exception as e:
+        my_logger.exception(f"Minio initialization exception, e: {e}")
+
+    try:
         await initialize_boto3()
+    except Exception as e:
+        my_logger.exception(f"initialization exception startup, e: {e}")
+
         instrumentator.expose(_app)
         if not broker.is_worker_process:
             await broker.startup()
-    except Exception as e:
-        my_logger.exception(f"Exception in app_lifespan startup, e: {e}")
     yield
 
     try:

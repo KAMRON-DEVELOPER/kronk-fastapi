@@ -33,8 +33,8 @@ DBSession = Annotated[AsyncSession, Depends(get_session)]
 
 
 async def initialize_db():
+    my_logger.debug("Database is initializing...")
     async with async_engine.begin() as conn:
-        my_logger.debug("Database is initializing...")
         await conn.run_sync(Base.metadata.create_all)
 
 

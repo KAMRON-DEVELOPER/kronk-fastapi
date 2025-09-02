@@ -38,6 +38,7 @@ except Exception as e:
 
 @broker.task
 async def start_ocr_upload_pipeline(user_id: str, target_language_code: str, image_paths: list[str]):
+    my_logger.debug("starting start_ocr_upload_pipeline...")
     try:
         blob_names = []
 
@@ -52,6 +53,8 @@ async def start_ocr_upload_pipeline(user_id: str, target_language_code: str, ima
             # Run 5 uploads in parallel
             results = await asyncio.gather(*tasks)
             blob_names.extend(results)
+
+        my_logger.debug(f"uploaded to GCS: blob_names: {blob_names}, results: {results}")
 
         output_prefix = f"ocr_output/{user_id}/"
 
@@ -81,6 +84,7 @@ class SentenceData:
 @broker.task(task_name="create_vocabulary_task")
 async def create_vocabulary_task(owner_id: str, output_prefix: str, target_language_code: str, session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
     oid = UUID(owner_id)
+
     try:
         # Process OCR results
         original_sentences = set(await download_ocr_result(output_prefix))

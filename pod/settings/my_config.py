@@ -85,8 +85,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings():
-
-    return  Settings()
+    return Settings()
 
 
 @lru_cache(maxsize=1)
