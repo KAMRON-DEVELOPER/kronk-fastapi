@@ -15,8 +15,6 @@ services:
       - ca.pem
       - pg-server-cert.pem
       - pg-server-key.pem
-      - fastapi-client-cert.pem
-      - fastapi-client-key.pem
     environment:
       - POSTGRES_DB_FILE=/run/secrets/POSTGRES_DB
       - POSTGRES_USER_FILE=/run/secrets/POSTGRES_USER
@@ -60,8 +58,8 @@ services:
       - ca.pem
       - redis-server-cert.pem
       - redis-server-key.pem
-      - fastapi-client-cert.pem
-      - fastapi-client-key.pem
+      - client-cert.pem
+      - client-key.pem
     volumes:
       - ./configurations/redis-stack/redis-stack.conf:/redis-stack.conf:ro
       - ./volumes/redis_storage:/data
@@ -69,7 +67,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          'redis-cli --tls --cacert /run/secrets/ca.pem --cert /run/secrets/fastapi-client-cert.pem --key /run/secrets/fastapi-client-key.pem  -a "$$(cat /run/secrets/REDIS_PASSWORD)" ping | grep PONG',
+          'redis-cli --tls --cacert /run/secrets/ca.pem --cert /run/secrets/client-cert.pem --key /run/secrets/client-key.pem  -a "$$(cat /run/secrets/REDIS_PASSWORD)" ping | grep PONG',
         ]
       interval: 5s
       timeout: 5s
@@ -90,20 +88,20 @@ secrets:
     file: ./certs/POSTGRES_PASSWORD
 
   ca.pem:
-    file: ./certs/ca.pem
+    file: ./certs/ca/ca.pem
   pg-server-cert.pem:
-    file: ./certs/pg-server-cert.pem
+    file: ./certs/postgres/pg-server-cert.pem
   pg-server-key.pem:
-    file: ./certs/pg-server-key.pem
-  fastapi-client-cert.pem:
-    file: ./certs/fastapi-client-cert.pem
-  fastapi-client-key.pem:
-    file: ./certs/fastapi-client-key.pem
+    file: ./certs/postgres/pg-server-key.pem
+  client-cert.pem:
+    file: ./certs/client/client-cert.pem
+  client-key.pem:
+    file: ./certs/client/client-key.pem
 
   redis-server-cert.pem:
-    file: ./certs/redis-server-cert.pem
+    file: ./certs/redis/redis-server-cert.pem
   redis-server-key.pem:
-    file: ./certs/redis-server-key.pem
+    file: ./certs/redis/redis-server-key.pem
 
 networks:
   local_network_bridge:

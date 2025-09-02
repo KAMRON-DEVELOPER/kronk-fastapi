@@ -38,7 +38,6 @@ except Exception as e:
 
 @broker.task
 async def start_ocr_upload_pipeline(user_id: str, target_language_code: str, image_paths: list[str]):
-    my_logger.debug("starting start_ocr_upload_pipeline...")
     try:
         blob_names = []
 
