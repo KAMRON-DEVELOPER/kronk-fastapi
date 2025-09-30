@@ -61,7 +61,7 @@ echo "extendedKeyUsage = clientAuth" > docker-client-ext.cnf
 openssl x509 -req -in docker-client.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out docker-client-cert.pem -days 3650 -sha256 -extfile docker-client-ext.cnf
 
 
-# **************** 3. 🔐 Redis and PostgreSQL TLS (for FastAPI) ****************
+# **************** 3. 🔐 PostgreSQL, Redis and RabbitMQ TLS (for Backend) ****************
 
 # Redis
 mkdir -p ~/certs/redis && cd ~/certs/redis
@@ -86,10 +86,18 @@ echo "subjectAltName = DNS:localhost,DNS:postgres.kronk.uz,IP:127.0.0.1" > pg-ex
 echo "extendedKeyUsage = serverAuth" >> pg-ext.cnf
 openssl x509 -req -in pg-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out pg-server-cert.pem -days 3650 -sha256 -extfile pg-ext.cnf
 
-# FastAPI Client (shared for Redis and PostgreSQL)
-mkdir -p ~/certs/fastapi && cd ~/certs/fastapi
-openssl genrsa -out fastapi-client-key.pem 4096
-openssl req -new -key fastapi-client-key.pem -out fastapi-client.csr -subj "/CN=kamronbek"
+# RabbitMQ
+mkdir -p ~/certs/rabbitmq && cd ~/certs/rabbitmq
+openssl genrsa -out rabbitmq-server-key.pem 4096
+openssl req -new -key rabbitmq-server-key.pem -out rabbitmq-server.csr -subj "/CN=rabbitmq.kronk.uz"
+echo "subjectAltName = DNS:localhost,DNS:rabbitmq.kronk.uz,IP:127.0.0.1" > rabbitmq-ext.cnf
+echo "extendedKeyUsage = serverAuth" >> rabbitmq-ext.cnf
+openssl x509 -req -in rabbitmq-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out rabbitmq-server-cert.pem -days 3650 -sha256 -extfile rabbitmq-ext.cnf
+
+# Backend Client (shared for PostgreSQL, Redis and RabbitMQ)
+mkdir -p ~/certs/client && cd ~/certs/client
+openssl genrsa -out client-key.pem 4096
+openssl req -new -key client-key.pem -out client.csr -subj "/CN=kamronbek"
 
 cat > client-ext.cnf <<EOF
 extendedKeyUsage = clientAuth
@@ -97,7 +105,7 @@ EOF
 
 echo "extendedKeyUsage = clientAuth" > client-ext.cnf
 
-openssl x509 -req -in fastapi-client.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out fastapi-client-cert.pem -days 3650 -sha256 -extfile client-ext.cnf
+openssl x509 -req -in client.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out client-cert.pem -days 3650 -sha256 -extfile client-ext.cnf
 ```
 
 ---
@@ -206,8 +214,8 @@ You can link or copy secrets manually:
 ```bash
 # POSTGRES
 sudo cp certs/ca/ca.pem /run/secrets/ca.pem
-sudo cp certs/fastapi/fastapi-client-cert.pem /run/secrets/fastapi_client_cert.pem
-sudo cp certs/fastapi/fastapi-client-key.pem /run/secrets/fastapi_client_key.pem
+sudo cp certs/fastapi/client-cert.pem /run/secrets/fastapi_client_cert.pem
+sudo cp certs/fastapi/client-key.pem /run/secrets/fastapi_client_key.pem
 
 echo "postgresql+asyncpg://kamronbek:kamronbek2003@localhost:5432/kronk_db" | sudo tee /run/secrets/DATABASE_URL
 
@@ -251,8 +259,8 @@ cd ~/certs/docker
 docker secret create ca.pem ~/certs/ca/ca.pem
 docker secret create docker-client-cert.pem ~/certs/docker/docker-client-cert.pem
 docker secret create docker-client-key.pem ~/certs/docker/docker-client-key.pem
-# docker secret create fastapi-client-cert.pem ~/certs/fastapi/fastapi-client-cert.pem
-# docker secret create fastapi-client-key.pem ~/certs/fastapi/fastapi-client-key.pem
+# docker secret create client-cert.pem ~/certs/fastapi/client-cert.pem
+# docker secret create client-key.pem ~/certs/fastapi/client-key.pem
 
 # POSTGRES
 echo "postgresql+asyncpg://kamronbek:kamronbek2003@postgres.kronk.uz:5432/kronk_db" | docker secret create DATABASE_URL -
@@ -372,18 +380,18 @@ psql -h localhost -d $(cat /run/secrets/POSTGRES_DB) -U $(cat /run/secrets/POSTG
 ~/Documents/fastapi/kronk-backend-production/service master !3 ❯ PGPASSWORD=kamronbek2003 \                                                                           5s
 PGSSLMODE=verify-full \
 PGSSLROOTCERT=~/certs/ca/ca.pem \
-PGSSLCERT=~/certs/fastapi/fastapi-client-cert.pem \
-PGSSLKEY=~/certs/fastapi/fastapi-client-key.pem \
+PGSSLCERT=~/certs/fastapi/client-cert.pem \
+PGSSLKEY=~/certs/fastapi/client-key.pem \
 psql -h 127.0.0.1 -U kamronbek -d kronk_db
 
 # third
-psql "sslmode=verify-full sslrootcert=/home/kamronbek/certs/ca/ca.pem sslcert=/home/kamronbek/certs/fastapi/fastapi-client-cert.pem sslkey=/home/kamronbek/certs/fastapi/fastapi-client-key.pem host=localhost hostaddr=127.0.0.1 port=5432 user=kamronbek dbname=kronk_db"
+psql "sslmode=verify-full sslrootcert=/home/kamronbek/certs/ca/ca.pem sslcert=/home/kamronbek/certs/fastapi/client-cert.pem sslkey=/home/kamronbek/certs/fastapi/client-key.pem host=localhost hostaddr=127.0.0.1 port=5432 user=kamronbek dbname=kronk_db"
 ```
 
 ### Connecting to redis
 
 ```bash
-redis-cli --tls --cacert ~/certs/ca/ca.pem --cert ~/certs/fastapi/fastapi-client-cert.pem --key ~/certs/fastapi/fastapi-client-key.pem -a kamronbek2003
+redis-cli --tls --cacert ~/certs/ca/ca.pem --cert ~/certs/fastapi/client-cert.pem --key ~/certs/fastapi/client-key.pem -a kamronbek2003
 ```
 
 ---
