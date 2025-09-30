@@ -16,8 +16,8 @@ class MeaningIn(BaseModel):
 
 
 class PhoneticIn(BaseModel):
-    text: Optional[str]
-    audio: Optional[str]
+    text: Optional[str] = None
+    audio: Optional[str] = None
 
 
 class DictionaryIn(BaseModel):

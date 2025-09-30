@@ -50,7 +50,7 @@ class UserVocabularyModel(BaseModel):
 
 class PhoneticModel(BaseModel):
     __tablename__ = "phonetic_table"
-    text: Mapped[str] = mapped_column(Text)
+    text: Mapped[Optional[str]] = mapped_column(String(length=255), nullable=True)
     audio: Mapped[Optional[str]]
     vocabulary_id: Mapped[UUID] = mapped_column(ForeignKey("vocabulary_table.id"))
     vocabulary: Mapped["VocabularyModel"] = relationship(back_populates="phonetics")

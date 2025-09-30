@@ -272,6 +272,8 @@ async def fetch_dictionary(word: str) -> Optional[DictionaryIn]:
                 if response.status == 200:
                     data: list[dict] = await response.json()
 
+                    my_logger.debug(f"data: {data}")
+
                     # Use the first entry as the base
                     merged_data = data[0]
 
@@ -381,127 +383,6 @@ async def translate_text_async(contents: list[str], target_language_code: str) -
     except Exception as ex:
         my_logger.exception(f"translate_text_async failed: {ex}")
         raise ex
-
-
-# @broker.task(task_name="create_vocabulary_task")
-# async def create_vocabulary_task(owner_id: str, output_prefix: str, target_language_code: str,
-#                                  session: Annotated[AsyncSession, TaskiqDepends(get_session)]):
-#     try:
-#         oid = UUID(hex=owner_id)
-#
-#         # Get original sentences from OCR results
-#         original_sentences = await download_ocr_result(output_prefix=output_prefix)  # ["it is totally fine", "what did you expected?", "that was awesome!"]
-#         my_logger.warning(f"original_sentences: {original_sentences}")
-#         translated_sentences = []  # ["bu butunlay yaxshi", "nima kutgan edingiz?", "bu ajoyib edi"]
-#
-#         # Translate sentences in batches
-#         for chunk in chunked_by_characters(items=original_sentences, max_chars=4500):
-#             translated_sentence = await translate_text_async(contents=chunk, target_language_code=target_language_code)
-#             translated_sentences.extend(translated_sentence)
-#         my_logger.warning(f"translated_sentences: {translated_sentences}")
-#
-#         # Creating sentence models
-#         sentence_ids_with_tokens: list[tuple[UUID, list[str]]] = []
-#         sentence_ids_with_sentence: dict[UUID, SentenceModel] = {}
-#
-#         for original_text, translated_text in zip(original_sentences, translated_sentences):
-#             sentence_id = uuid4()
-#
-#             tokens = [clean_token(token) for token in word_tokenize(original_text) if token.isalpha() and clean_token(token) not in BASIC_WORDS]
-#             sentence_ids_with_tokens.append((sentence_id, tokens))
-#
-#             sentence = SentenceModel(id=sentence_id, sentence=original_text, translation=translated_text, target_language=target_language_code, owner_id=oid)
-#             sentence_ids_with_sentence[sentence_id] = sentence
-#             session.add(sentence)
-#
-#         my_logger.warning(f"sentence_ids_with_tokens: {sentence_ids_with_tokens}")
-#         my_logger.warning(f"sentence_ids_with_sentence: {sentence_ids_with_sentence}")
-#
-#         # Step 4: Determine all unique new words
-#         all_unique_words = set()
-#         for _, words in sentence_ids_with_tokens:
-#             all_unique_words.update(words)
-#
-#         # Step 5: Fetch existing vocabulary words
-#         stmt = select(VocabularyModel.word).where(VocabularyModel.word.in_(all_unique_words), VocabularyModel.target_language == target_language_code)
-#         existing_vocab_query = await session.scalars(stmt)
-#         my_logger.warning(f"existing_vocab_query: {existing_vocab_query}")
-#         existing_words = {row[0] for row in existing_vocab_query.all()}
-#         new_words = all_unique_words - existing_words
-#
-#         # Step 6: Translate new words
-#         translated_map: dict[str, str] = {}
-#         for chunk in chunked_by_characters(items=list(new_words), max_chars=4500):
-#             translated = await translate_text_async(contents=chunk, target_language_code=target_language_code)
-#             for word, translated_word in zip(chunk, translated):
-#                 translated_map[word] = translated_word
-#
-#         # Step 7: Fetch dictionary data
-#         dictionary_map: dict[str, DictionaryIn] = {}
-#         dictionary_tasks = [fetch_dictionary(word) for word in new_words]
-#         dictionary_results: list[DictionaryIn] = await asyncio.gather(*dictionary_tasks)
-#         for word, result in zip(new_words, dictionary_results):
-#             if result:
-#                 dictionary_map[word] = result
-#
-#         # Step 7.1: Bulk fetch existing vocabularies
-#         existing_vocabulary_query = await session.execute(
-#             select(VocabularyModel).where(VocabularyModel.word.in_(all_unique_words), VocabularyModel.target_language == target_language_code))
-#         existing_vocab_map: dict[str, VocabularyModel] = {vocabulary.word: vocabulary for vocabulary in existing_vocabulary_query.scalars().all()}
-#
-#         # Step 7.2: Create and collect new vocabulary entries
-#         new_vocab_map: dict[str, VocabularyModel] = {}
-#         for word in all_unique_words:
-#             if word not in existing_vocab_map:
-#                 vocabulary = VocabularyModel(word=word, translation=translated_map.get(word, ""), target_language=target_language_code)
-#
-#                 # Attach dictionary data
-#                 dict_data = dictionary_map.get(word)
-#                 if dict_data:
-#                     for p in dict_data.phonetics:
-#                         vocabulary.phonetics.append(PhoneticModel(text=p.text, audio=p.audio))
-#                     for m in dict_data.meanings:
-#                         meaning = MeaningModel(part_of_speech=m.part_of_speech)
-#                         for d in m.definitions:
-#                             meaning.definitions.append(DefinitionModel(definition=d.definition, example=d.example))
-#                         vocabulary.meanings.append(meaning)
-#
-#                 session.add(vocabulary)
-#                 new_vocab_map[word] = vocabulary
-#
-#         # 3. After flush, build user ↔ vocab connections
-#         await session.flush()
-#
-#         # Combine both vocab maps
-#         all_vocab_map: dict[str, VocabularyModel] = {**existing_vocab_map, **new_vocab_map}
-#
-#         # 4. Create UserVocabularyModel entries
-#         for word in all_unique_words:
-#             vocab = all_vocab_map[word]
-#             # Ensure user ↔ vocab relationship exists
-#             await session.merge(UserVocabularyModel(user_id=oid, vocabulary_id=vocab.id))
-#
-#         # 5. Link vocabularies to sentences
-#         for sentence_id, words in sentence_ids_with_tokens:
-#             sentence_model = sentence_ids_with_sentence.get(sentence_id)
-#             for word in words:
-#                 vocab = all_vocab_map.get(word)
-#                 if vocab and vocab not in sentence_model.words:
-#                     sentence_model.words.append(vocab)  # type: ignore[attr-defined]
-#
-#         # Step 9: Save all changes
-#         await session.commit()
-#
-#         # Step 10: Cleanup GCS folder & temp folder
-#         await delete_gcs_folder(settings.GCS_BUCKET_NAME, output_prefix)
-#         shutil.rmtree(settings.TEMP_IMAGES_FOLDER_PATH / owner_id, ignore_errors=True)
-#
-#         return {"ok": True}
-#     except Exception as ex:
-#         my_logger.exception(f"create_vocabulary_task failed: {ex}")
-#         await session.rollback()
-#         raise ex
-
 
 BASIC_WORDS = {
     "the", "a", "an", "i", "you", "he", "she", "it", "we", "they", "is", "are", "was", "were", "am", "be", "been", "being", "in", "on", "at",

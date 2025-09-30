@@ -91,6 +91,3 @@ def get_settings():
 @lru_cache(maxsize=1)
 def get_nlp():
     return spacy.load("en_core_web_sm")
-
-
-get_settings()
