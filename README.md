@@ -48,14 +48,11 @@ openssl req -new -x509 -days 3650 -key ca-key.pem -sha256 -out ca.pem -subj "/CN
 # **************** 2. 🔐 Docker Daemon TLS (for Prometheus) ****************
 # Server certificate
 mkdir -p ~/certs/docker && cd ~/certs/docker
+## new
+# Step 1: Generate server key
 openssl genrsa -out docker-server-key.pem 4096
-openssl req -new -key docker-server-key.pem -out docker-server.csr -subj "/CN=127.0.0.1"
 
-echo "subjectAltName = DNS:localhost,IP:127.0.0.1" > docker-ext.cnf
-echo "extendedKeyUsage = serverAuth" >> docker-ext.cnf
-
-or
-
+# Step 2: Create SAN
 cat > docker-ext.cnf <<EOF
 [ req ]
 distinguished_name = dn
@@ -70,6 +67,19 @@ extendedKeyUsage = serverAuth
 subjectAltName = IP:127.0.0.1,IP:192.168.31.216,IP:192.168.31.217,DNS:swarm-manager
 EOF
 
+# Step 3: Create CSR with SAN
+openssl req -new -key docker-server-key.pem -out docker-server.csr -subj "/CN=swarm-manager" -config docker-ext.cnf -extensions v3_req
+
+# Step 4: Sign the CSR with your CA, including SAN
+openssl x509 -req -in docker-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial \
+  -out docker-server-cert.pem -days 3650 -sha256 -extfile docker-ext.cnf -extensions v3_req
+
+## old
+openssl genrsa -out docker-server-key.pem 4096
+openssl req -new -key docker-server-key.pem -out docker-server.csr -subj "/CN=127.0.0.1"
+
+echo "subjectAltName = DNS:localhost,IP:127.0.0.1" > docker-ext.cnf
+echo "extendedKeyUsage = serverAuth" >> docker-ext.cnf
 
 openssl x509 -req -in docker-server.csr -CA ../ca/ca.pem -CAkey ../ca/ca-key.pem -CAcreateserial -out docker-server-cert.pem -days 3650 -sha256 -extfile docker-ext.cnf
 
